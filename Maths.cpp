@@ -1,7 +1,7 @@
 /***********************************************************************************************************************
-PicoMite MMBasic
+MMBasic for Windows
 
-MATHS.c
+Maths.cpp
 
 <COPYRIGHT HOLDERS>  Geoff Graham, Peter Mather
 Copyright (c) 2021, <COPYRIGHT HOLDERS> All rights reserved.
