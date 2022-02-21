@@ -234,7 +234,7 @@ void FullScreenEditor(void) {
         statuscount = 0;
         do {
             ShowMMBasicCursor(true);
-            c = getConsole();
+            c = getConsole(0);
             PrintStatus();
         } while (c == -1);
         ShowMMBasicCursor(false);
@@ -651,7 +651,7 @@ void MarkMode(unsigned char* cb, unsigned char* buf) {
     oldmark = mark = txtp;
     txtpx = oldx = curx; txtpy = oldy = cury;
     while (1) {
-        c = getConsole();
+        c = getConsole(0);
         if (c != -1 && errmsg) {
             PrintFunctKeys(MARK);
             errmsg = false;
@@ -1068,7 +1068,7 @@ void printScreen(void) {
         curx = 0;
         cury = i + 1;
     }
-    while (getConsole() != -1);                                           // consume any keystrokes accumulated while redrawing the screen
+    while (getConsole(0) != -1);                                           // consume any keystrokes accumulated while redrawing the screen
 }
 
 
@@ -1227,7 +1227,7 @@ void Scroll(void) {
     PrintFunctKeys(EDIT);
     printLine(VHeight - 1 + edy);
     PositionCursor(txtp);
-    while (getConsole() != -1);                                         // consume any keystrokes accumulated while redrawing the screen
+    while (getConsole(0) != -1);                                         // consume any keystrokes accumulated while redrawing the screen
 }
 
 
@@ -1240,7 +1240,7 @@ void ScrollDown(void) {
     printLine(edy);
     PrintFunctKeys(EDIT);
     PositionCursor(txtp);
-    while (getConsole() != -1);                                         // consume any keystrokes accumulated while redrawing the screen
+    while (getConsole(0) != -1);                                         // consume any keystrokes accumulated while redrawing the screen
 }
 
 #endif

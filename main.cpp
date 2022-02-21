@@ -44,6 +44,9 @@ uint32_t* PageBackground = FrameBuffer; //Page address to write to Background
 uint32_t* PageWrite0 = FrameBuffer; //Page address to write to layer 0
 uint32_t* PageWrite1 = FrameBuffer; //Page address to write to layer 1
 uint64_t BackGroundColour = 0xFF000000;
+int SampleRate = 44100;
+int NChannels = 2;
+bool FullScreen = false;
 int ReadPage=0, WritePage=0; 
 int ARGBenabled = 0;
 // Default layer is used as Page 0
@@ -58,7 +61,7 @@ volatile float fSynthFrequencyR = 261.63f;
 volatile float fFilterVolumeL = 1.0f;
 volatile float fFilterVolumeR = 1.0f;
 int nSamplePos = 0;
-float fPreviousSamples[1024];
+float fPreviousSamples[4096];
 using clock_type = std::chrono::high_resolution_clock;
 using namespace std::literals;
 extern "C" void MMPrintString(char* x);
@@ -86,10 +89,11 @@ float MMBasic::MyCustomSynthFunction(int nChannel, float fGlobalTime, float fTim
 		}
 	}
 	else if (CurrentlyPlaying == P_MOD) {
+		static int toggle = 0;
 		int32_t c1 = 0, c2 = 0, c3 = 0, c4 = 0;
-		int16_t* flacbuff;
-		float value = 0;
+		float value = 0, valuee=0;
 		if (swingbuf) { //buffer is primed
+			int16_t* flacbuff;
 			if (swingbuf == 1)flacbuff = (int16_t*)sbuff1;
 			else flacbuff = (int16_t*)sbuff2;
 			if (ppos < bcount[swingbuf]) {
@@ -115,7 +119,45 @@ float MMBasic::MyCustomSynthFunction(int nChannel, float fGlobalTime, float fTim
 				}
 			}
 		}
-		return value;
+		if (CurrentlyPlayinge == P_WAV) {
+			static int toggle = 0;
+			float* flacbuff;
+			if (swingbufe == 1)flacbuff = (float*)sbuff1e;
+			else flacbuff = (float*)sbuff2e;
+			if (ppose < bcounte[swingbufe]) {
+				if (mono) {
+					if(toggle)
+						valuee = (float)flacbuff[ppose++] * (nChannel == 0 ? fFilterVolumeL : fFilterVolumeR);
+					else 
+						valuee = (float)flacbuff[ppose] * (nChannel == 0 ? fFilterVolumeL : fFilterVolumeR);
+					toggle = !toggle;
+				}
+				else {
+					valuee = (float)flacbuff[ppose++] * (nChannel == 0 ? fFilterVolumeL : fFilterVolumeR);
+
+				}
+			}
+			if (ppose == bcounte[swingbufe]) {
+				int psave = ppose;
+				bcounte[swingbufe] = 0;
+				ppose = 0;
+				if (swingbufe == 1)swingbufe = 2;
+				else swingbufe = 1;
+				if (bcounte[swingbufe] == 0 && !playreadcompletee) { //nothing ready yet so flip back
+					if (swingbufe == 1) {
+						swingbufe = 2;
+						nextbufe = 1;
+					}
+					else {
+						swingbufe = 1;
+						nextbufe = 2;
+					}
+					bcounte[swingbufe] = psave;
+					ppose = 0;
+				}
+			}
+		}
+		return value+valuee;
 	}
 	else if (CurrentlyPlaying == P_MP3 || CurrentlyPlaying == P_WAV || CurrentlyPlaying == P_FLAC) {
 		float* flacbuff;
@@ -126,14 +168,8 @@ float MMBasic::MyCustomSynthFunction(int nChannel, float fGlobalTime, float fTim
 		if (swingbuf) { //buffer is primed
 			if (swingbuf == 1)flacbuff = (float*)sbuff1;
 			else flacbuff = (float*)sbuff2;
-			if (CurrentlyPlaying == P_WAV && mono) {
-//					HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, flacbuff[ppos]);
-//					HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, flacbuff[ppos++]);
-			}
-			else {
-				if (ppos < bcount[swingbuf]) {
-					value = (float)flacbuff[ppos++] * (nChannel == 0 ? fFilterVolumeL : fFilterVolumeR);
-				}
+			if (ppos < bcount[swingbuf]) {
+				value = (float)flacbuff[ppos++] * (nChannel == 0 ? fFilterVolumeL : fFilterVolumeR);
 			}
 			if (ppos == bcount[swingbuf]) {
 				int psave = ppos;
@@ -217,7 +253,7 @@ bool MMBasic::OnUserUpdate(float fElapsedTime)
 {
 	auto when_started = clock_type::now();
 	auto target_time = when_started + 10ms;
-	CheckKeyBoard(fElapsedTime);
+	CheckKeyBoard();
 	SetPixelMode(olc::Pixel::NORMAL);
 	SetDrawTarget(PAGE0);
 	for (int y = 0; y < VRes; y++) {
@@ -255,6 +291,7 @@ bool MMBasic::OnUserCreate()
 	for (int i = 0; i < FRAMEBUFFERSIZE; i++)FrameBuffer[i] = 0;
 	SetDrawTarget(PAGE1); //Top layer
 	SetPixelMode(olc::Pixel::NORMAL);
+
 	Clear(olc::BLANK);
  
 	PAGE0 = CreateLayer(); //Normal write layer
@@ -268,7 +305,8 @@ bool MMBasic::OnUserCreate()
 	SetDrawTarget(BACKGROUND);
 	SetPixelMode(olc::Pixel::NORMAL);
 	Clear((uint32_t)BackGroundColour);
-	olc::SOUND::InitialiseAudio(44100, 2, 8, 1024);
+	int bufferneeded = RoundUptoPage(SampleRate * NChannels /96) ;
+	olc::SOUND::InitialiseAudio(SampleRate, NChannels, 8, bufferneeded);
 	using namespace std::placeholders;
 	// This gives a compilation error and I can't find the correct syntax
 	olc::SOUND::SetUserSynthFunction(std::bind(&MMBasic::MyCustomSynthFunction, demo, _1, _2, _3));
@@ -284,7 +322,8 @@ bool MMBasic::OnUserDestroy()
 }
 DWORD WINAPI Screen(LPVOID lpParameter)
 {
-	if(demo->Construct(HRes, VRes, PixelSize, PixelSize))
+	if(demo->Construct(HRes, VRes, PixelSize, PixelSize, FullScreen, false, false))
+//	if (demo->Construct(HRes, VRes, PixelSize, PixelSize))
 		demo->Start();
 	return 0;
 }
@@ -336,6 +375,12 @@ int main(int argc, char* argv[]) {
 			uSec(100000);
 			KEYLIFOpointer = 0;
 			myHandle = CreateThread(0, 0, Basic, &myCounter, 0, &BasicID);
+			break;
+		case MODE_SAMPLERATE:
+			olc::SOUND::DestroyAudio();
+			int bufferneeded = RoundUptoPage(SampleRate * NChannels / 96);
+			olc::SOUND::InitialiseAudio(SampleRate, NChannels, 8, bufferneeded);
+			SystemMode = MODE_RUN;
 			break;
 		}
 	}

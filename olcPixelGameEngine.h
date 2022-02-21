@@ -4617,6 +4617,7 @@ namespace olc
 		{
 			if(renderer->CreateDevice({ olc_hWnd }, bFullScreen, bEnableVSYNC) == olc::rcode::OK)
 			{
+
 				renderer->UpdateViewport(vViewPos, vViewSize);
 				return olc::rcode::OK;
 			}
@@ -4641,7 +4642,7 @@ namespace olc
 
 			// Define window furniture
 			DWORD dwExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-			DWORD dwStyle = WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_THICKFRAME;
+			DWORD dwStyle = WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
 
 			olc::vi2d vTopLeft = vWindowPos;
 
@@ -4666,7 +4667,9 @@ namespace olc
 
 			olc_hWnd = CreateWindowEx(dwExStyle, olcT("OLC_PIXEL_GAME_ENGINE"), olcT(""), dwStyle,
 				vTopLeft.x, vTopLeft.y, width, height, NULL, NULL, GetModuleHandle(nullptr), this);
-
+			SetFocus(olc_hWnd);
+			ptrPGE->olc_UpdateKeyFocus(true);
+			ptrPGE->olc_UpdateMouseFocus(true);
 			// Create Keyboard Mapping
 			mapKeys[0x00] = Key::NONE;
 			mapKeys[0x41] = Key::A; mapKeys[0x42] = Key::B; mapKeys[0x43] = Key::C; mapKeys[0x44] = Key::D; mapKeys[0x45] = Key::E;
@@ -4720,6 +4723,10 @@ namespace olc
 #else
 			SetWindowText(olc_hWnd, s.c_str());
 #endif
+			SetFocus(olc_hWnd);
+			ptrPGE->olc_UpdateKeyFocus(true);
+			ptrPGE->olc_UpdateMouseFocus(true);
+
 			return olc::OK;
 		}
 

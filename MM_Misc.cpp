@@ -27,7 +27,11 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "Editor.h"
 #include "MMBasic_Includes.h"
 #include <shlobj.h>
+#include "hxcmod.h"
+
 extern char* editCbuff;
+extern modcontext mcontext;
+
 int TickPeriod[NBRSETTICKS];
 volatile int TickTimer[NBRSETTICKS];
 unsigned char* TickInt[NBRSETTICKS];
@@ -316,7 +320,7 @@ void cmd_autosave(void) {
     ClearProgram();                                                 // clear any leftovers from the previous program
     p = buf = (unsigned char *)GetMemory(EDIT_BUFFER_SIZE);
     CrunchData(&p, 0);                                              // initialise the crunch data subroutine
-    while ((c = getConsole()) != 0x1a && c != F1 && c != F2) {                    // while waiting for the end of text char
+    while ((c = getConsole(0)) != 0x1a && c != F1 && c != F2) {                    // while waiting for the end of text char
         if (c == CTRLKEY('V')) {
             int count = EditPaste();
             if (!(editCbuff == NULL || count == 0)) {
@@ -370,7 +374,7 @@ void cmd_autosave(void) {
 
     *p = 0;                                                         // terminate the string in RAM
     ShowMMBasicCursor(0);
-    while (getConsole() != -1);                                      // clear any rubbish in the input
+    while (getConsole(0) != -1);                                      // clear any rubbish in the input
 //    ClearSavedVars();                                               // clear any saved variables
     int fnbr;
     char* pm = (char *)buf;
@@ -489,6 +493,9 @@ void cmd_timer(void) {
 }
 
 void cmd_test(void) {
+    getargs(&cmdline, 5, (unsigned char*)",");
+//    float a = getnumber(argv[0]);
+//    float b= getnumber(argv[2]);
 }
 
 // this is invoked as a function
@@ -525,9 +532,11 @@ void printoptions(void) {
     else if (Option.mode == 10)	PO2Str("Default mode 10", "848x480", 1);
     else if (Option.mode == 11)	PO2Str("Default mode 11", "1280x720", 1);
     else if (Option.mode == 12)	PO2Str("Default mode 12", "960x540", 1);
+    else if (Option.mode == 14)	PO2Str("Default mode 14", "960x540", 1);
     else if (Option.mode == 15)	PO2Str("Default mode 15", "1280x1024", 1);
     else if (Option.mode == 16)	PO2Str("Default mode 16", "1920x1080", 1);
     else if (Option.mode == 18)	PO2Str("Default mode 18", "1024x600", 1);
+    else if (Option.mode == 19)	PO2Str("Default mode 18", "3840x2160", 1);
     PO3Int("Default Font", (Option.DefaultFont >> 4) + 1, Option.DefaultFont & 0xf);
     if (strlen((char*)Option.defaultpath))PO2Str("Default path", (char*)Option.defaultpath, 1);
     if (Option.Autorun) PO2Str("Autorun", "ON", 1);
@@ -644,52 +653,60 @@ void cmd_option(void) {
 
     tp = checkstring(cmdline, (unsigned char *)"DEFAULT MODE");
     if (tp) {
-        int mode=9, DefaultFont=1;
+        int mode = 9, DefaultFont = 1;
+        bool fullscreen = 0;
+        getargs(&tp, 3, (unsigned char*)",");
         if (CurrentLinePtr) error((char *)"Invalid in a program");
-        if (checkstring(tp, (unsigned char *)"8")) {
+        if (checkstring(argv[0], (unsigned char*)"8")) {
             mode = 8;
             Option.DefaultFont = 1;
         }
-        else if (checkstring(tp, (unsigned char*)"1")) {
+        else if (checkstring(argv[0], (unsigned char*)"1")) {
             mode = 1;
             DefaultFont = 1;
         }
-         else if (checkstring(tp, (unsigned char*)"9")) {
+         else if (checkstring(argv[0], (unsigned char*)"9")) {
             mode = 9;
             DefaultFont = (2<<4) | 1;
         }
-        else if (checkstring(tp, (unsigned char*)"10")) {
+        else if (checkstring(argv[0], (unsigned char*)"10")) {
             mode = 10;
             DefaultFont = 1;
         }
-        else if (checkstring(tp, (unsigned char*)"11")) {
+        else if (checkstring(argv[0], (unsigned char*)"11")) {
             mode = 11;
             DefaultFont = (2 << 4) | 1;
         }
-        else if (checkstring(tp, (unsigned char*)"12")) {
+        else if (checkstring(argv[0], (unsigned char*)"12")) {
             mode = 12;
             DefaultFont = (3 << 4) | 1;
         }
-        else if (checkstring(tp, (unsigned char*)"15")) {
+        else if (checkstring(argv[0], (unsigned char*)"14")) {
+            mode = 14;
+            DefaultFont = 1;
+        }
+        else if (checkstring(argv[0], (unsigned char*)"15")) {
             mode = 15;
             DefaultFont = (2 << 4) | 1;
         }
-        else if (checkstring(tp, (unsigned char*)"16")) {
+        else if (checkstring(argv[0], (unsigned char*)"16")) {
             mode = 16;
             DefaultFont = (2 << 4) | 1;
         }
-        else if (checkstring(tp, (unsigned char*)"18")) {
+        else if (checkstring(argv[0], (unsigned char*)"18")) {
             mode = 18;
             DefaultFont = (3 << 4) | 1;
         }
-        else error((char *)"Invalid mode");
+       else error((char *)"Invalid mode");
+        if (argc == 3)fullscreen = (bool)getint(argv[2], 0, 1);
         Option.mode = mode;
         Option.DefaultFont = DefaultFont;
+        Option.fullscreen = fullscreen;
         Option.hres = xres[Option.mode];
         Option.vres = yres[Option.mode];
         Option.pixelnum = pixeldensity[Option.mode];
         SaveOptions();
-        setmode(Option.mode,0);
+        setmode(Option.mode,0, Option.fullscreen);
         SetFont(Option.DefaultFont);
         return;
     }
@@ -866,6 +883,35 @@ void fun_info(void) {
         targ = T_INT;
         return;
     }
+    tp = checkstring(ep, (unsigned char*)"SOUND");
+    if (tp) {
+        switch (CurrentlyPlaying) {
+        case P_NOTHING:strcpy((char*)sret, "OFF"); break;
+        case P_PAUSE_TONE:
+        case P_PAUSE_MP3:
+        case P_PAUSE_WAV:
+        case P_PAUSE_MOD:
+        case P_PAUSE_SOUND:
+        case P_PAUSE_FLAC:strcpy((char*)sret, "PAUSED"); break;
+        case P_TONE:strcpy((char*)sret, "TONE"); break;
+        case P_WAV:strcpy((char*)sret, "WAV"); break;
+        case P_MP3:strcpy((char*)sret, "MP3"); break;
+        case P_MOD:strcpy((char*)sret, "MODFILE"); break;
+        case P_TTS:strcpy((char*)sret, "TTS"); break;
+        case P_FLAC:strcpy((char*)sret, "FLAC"); break;
+        case P_DAC:strcpy((char*)sret, "DAC"); break;
+        case P_SOUND:strcpy((char*)sret, "SOUND"); break;
+        }
+        CtoM(sret);
+        targ = T_STR;
+        return;
+    }
+    tp = checkstring(ep, (unsigned char*)"SAMPLE PLAYING");
+    if (tp) {
+        iret = (int64_t)((uint32_t)hxcmod_effectplaying(&mcontext, (unsigned short)(getint(tp, 1, NUMMAXSEFFECTS) - 1)));
+        targ = T_INT;
+        return;
+    }
     tp = checkstring(ep, (unsigned char *)"FONT ADDRESS");
     if (tp) {
         iret = (int64_t)((uint32_t)FontTable[getint(tp, 1, FONT_TABLE_SIZE) - 1]);
@@ -906,7 +952,7 @@ void fun_info(void) {
             else if (DefaultType == T_STR)strcpy((char *)sret, "String");
             else strcpy((char *)sret, "None");
         }
-        else if (checkstring(tp, (unsigned char *)"BASE")) {
+         else if (checkstring(tp, (unsigned char *)"BASE")) {
             if (OptionBase == 1)iret = 1;
             else iret = 0;
             targ = T_INT;
@@ -1001,6 +1047,11 @@ void fun_info(void) {
             iret = (int64_t)((uint32_t)varcnt);
             targ = T_INT;
             return;
+        }
+        else if (checkstring(ep, (unsigned char*)"CURRENT")) {
+            strcpy((char *)sret, MMgetcwd());
+            strcat((char*)sret, "\\");
+            strcat((char*)sret, lastfileedited);
         }
         else if (checkstring(ep, (unsigned char *)"FONTWIDTH")) {
             iret = FontTable[gui_font >> 4][0] * (gui_font & 0b1111);
@@ -2202,7 +2253,6 @@ void cmd_mouse(void) {
     getargs(&cmdline, 5, (unsigned char*)",");
     if (argc == 0)error((char*)"Syntax");
     if (*argv[0]) {
-        MouseInterrupLeftDown = GetIntAddress(argv[0]);					// get the interrupt location
         MouseFoundLeftDown = 0;
         InterruptUsed = true;
     }
@@ -2221,12 +2271,13 @@ void cmd_mouse(void) {
 void fun_keydown(void) {
     int n = (int)getint(ep, 0, 8);
     iret = 0;
-    while (getConsole() != -1); // clear anything in the input buffer
+    while (getConsole(1) != -1); // clear anything in the input buffer
     if (n == 8) {
         iret = (shiftlock ? 1 : 0) |
             (numlock ? 2 : 0) |
             (scrolllock ? 4 : 0);
     }
+    else if (n == 7)iret = modifiers;
     else if (n) {
         iret = (n <= KEYLIFOpointer ? KEYLIFO[n - 1] : 0);											        // this is the character
     }

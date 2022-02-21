@@ -78,6 +78,8 @@ void cmd_dump(void);
 void cmd_call(void);
 void cmd_execute(void);
 void cmd_mid(void);
+void cmd_quit(void);
+void cmd_debug(void);
 #endif
 
 
@@ -147,7 +149,8 @@ void cmd_mid(void);
 //	{ (unsigned char *)"Execute",	T_CMD,				0, cmd_execute	},
 { (unsigned char*)"MID$(",		T_CMD | T_FUN,		0, cmd_mid },
 { (unsigned char*)"Execute",	T_CMD,				0, cmd_execute },
-
+{ (unsigned char*)"Quit",	    T_CMD,				0, cmd_quit },
+{ (unsigned char*)"Console",	    T_CMD,				0, cmd_debug },
 #endif
 
 
@@ -210,7 +213,7 @@ extern void ListProgram(unsigned char* p, int all);
 extern unsigned char* llist(unsigned char* b, unsigned char* p);
 extern  "C" unsigned char* CheckIfTypeSpecified(unsigned char* p, int* type, int AllowDefaultType);
 extern int MMerrno;
-extern char MMErrMsg[];
+extern char *MMErrMsg;
 // definitions related to setting video off and on
 extern const unsigned int CaseOption;
 extern volatile int Keycomplete;
@@ -226,4 +229,5 @@ extern int TraceOn;
 extern unsigned char* TraceBuff[TRACE_BUFF_SIZE];
 extern int TraceBuffIndex;                                          // used for listing the contents of the trace buffer
 extern int OptionErrorSkip;
+extern char *MMErrMsg;
 #endif

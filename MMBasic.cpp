@@ -97,6 +97,9 @@ int ProgramChanged;                                                 // true if t
 int PSize;                                                          // the size of the program stored in ProgMemory[]
 unsigned char* StartEditPoint = NULL;
 int StartEditChar = 0;
+extern char errstring[256];
+extern int errpos;
+extern int StartEditLine, StartEditCharacter;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 // Global information used by functions
@@ -427,7 +430,7 @@ extern "C" void MMPrintString(char* s) {
 //  % = insert a number
 // the optional data to be inserted is the second argument to this function
 // this uses longjump to skip back to the command input and cleanup the stack
-extern "C" void error(char* msg, ...) {
+/*extern "C" void error(char* msg, ...) {
     char* p, * tp, tstr[STRINGSIZE * 2];
     va_list ap;
 
@@ -509,7 +512,120 @@ extern "C" void error(char* msg, ...) {
     MMPrintString((char*)"\r\n");
     memset(inpbuf, 0, STRINGSIZE);
     longjmp(mark, 1);
+}*/
+void MMErrorString(char* msg) {
+    char* c = &errstring[errpos];
+    char* q = msg;
+    while (*q)*c++ = *q++;
+    errpos += strlen(msg);
+    errstring[errpos] = 0;
 }
+void MMErrorchar(char c) {
+    errstring[errpos] = c;
+    errpos++;
+}
+
+void error(char* msg, ...) {
+    unsigned char* p, * tp;
+    char* cpos;
+    va_list ap;
+    ScrewUpTimer = 0;
+    if (MMerrno == 0) MMerrno = 16;                                  // indicate an error
+    memset(errstring, 0, sizeof(errstring));
+    LoadOptions();                                                  // make sure that the option struct is in a clean state
+
+    if (!OptionErrorSkip) {
+        SetFont(PromptFont);
+        gui_fcolour = PromptFC;
+        gui_bcolour = PromptBC;
+        if (CurrentX != 0) MMErrorString((char *)"\r\n");                   // error message should be on a new line
+    }
+
+    if (MMCharPos > 1 && !OptionErrorSkip) MMErrorString((char*)"\r\n");
+    if (CurrentLinePtr) {
+        tp = p = (unsigned char*)ProgMemory;
+        if (*CurrentLinePtr != T_NEWLINE && CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) {
+            // normally CurrentLinePtr points to a T_NEWLINE token but in this case it does not
+            // so we have to search for the start of the line and set CurrentLinePtr to that
+            while (*p != 0xff) {
+                while (*p) p++;                                        // look for the zero marking the start of an element
+                if (p >= CurrentLinePtr || p[1] == 0) {                // the previous line was the one that we wanted
+                    CurrentLinePtr = tp;
+                    break;
+                }
+                if (p[1] == T_NEWLINE) {
+                    tp = ++p;                                         // save because it might be the line we want
+                }
+                p++;                                                // step over the zero marking the start of the element
+                skipspace(p);
+                if (p[0] == T_LABEL) p += p[1] + 2;					// skip over the label
+            }
+        }
+        // we now have CurrentLinePtr pointing to the start of the line
+        llist(tknbuf, CurrentLinePtr);
+        p = tknbuf; skipspace(p);
+        if (CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) {
+            if (MMCharPos > 1)MMErrorString((char*)"\r\n");
+            MMErrorString((char*)"Error in ");
+            char* ename;
+            if ((cpos = strchr((char*)tknbuf, '|')) != NULL) {
+                if ((ename = strchr(cpos, ',')) != NULL) {
+                    *ename = 0;
+                    cpos++;
+                    ename++;
+                    MMErrorString(cpos);
+                    MMErrorString((char*)" line ");
+                    MMErrorString(ename);
+                }
+                else {
+                    cpos++;
+                    MMErrorString((char*)"line ");
+                    IntToStr((char*)inpbuf, atoi(cpos), 10);
+                    MMErrorString((char*)inpbuf);
+                    if (!OptionErrorSkip) {
+                        StartEditLine = atoi(cpos) - 1;
+                        StartEditCharacter = 0;
+                    }
+                }
+                MMErrorString((char*)": ");
+            }
+        }
+    }
+    //    if(!OptionErrorSkip)MMErrorString("Error");
+    if (*msg) {
+        //    	if(!OptionErrorSkip)MMErrorString(": ");
+        va_start(ap, msg);
+        while (*msg) {
+            if (*msg == '$')
+                MMErrorString(va_arg(ap, char*));
+            else if (*msg == '@')
+                MMErrorchar(va_arg(ap, int));
+            else if (*msg == '%' || *msg == '|') {
+                char buf[20];
+                IntToStr(buf, va_arg(ap, int), 10);
+                MMErrorString(buf);
+            }
+            else if (*msg == '&') {
+                char buf[20];
+                IntToStr(buf, va_arg(ap, int), 16);
+                MMErrorString(buf);
+            }
+            else {
+                MMErrorchar(*msg);
+            }
+            msg++;
+        }
+        if (!OptionErrorSkip)MMErrorString((char*)"\r\n");
+    }
+    MMErrMsg = errstring;
+    if (OptionErrorSkip) {
+        errpos = 0;
+        longjmp(ErrNext, 1);
+    }
+    int maxH = PageTable[WritePage].ymax;
+    longjmp(mark, 1);
+}
+
 
 
 // copy a MMBasic string to a new location
@@ -2585,7 +2701,7 @@ extern "C" void ClearRuntime(void) {
     findlabel(NULL);                                                // clear the label cache
     OptionErrorSkip = 0;
     MMerrno = 0;                                                    // clear the error flags
-    *MMErrMsg = 0;
+    if(MMErrMsg!=NULL)*MMErrMsg = 0;
     InitHeap();
     m_alloc(M_VAR);
     ClearVars(0);
@@ -2599,6 +2715,7 @@ extern "C" void ClearRuntime(void) {
     MouseInterrupRightDown = NULL;
     KeyInterrupt = NULL;
     OnKeyGOSUB = NULL;                                      // the program wants to turn the interrupt off
+    WAVInterrupt = NULL;
     CurrentLinePtr = ContinuePoint = NULL;
     for (int i = 0; i < NBRSETTICKS; i++)  TickInt[i]=NULL;
     for (i = 0; i < MAXSUBFUN; i++)  subfun[i] = NULL;

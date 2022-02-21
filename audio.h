@@ -67,25 +67,27 @@ extern volatile int vol_left, vol_right;
 #define AUDIO_HEADER
 #define MAXSOUNDS 4
 typedef enum { P_NOTHING, P_PAUSE_TONE, P_TONE, P_PAUSE_SOUND, P_SOUND, P_WAV, P_PAUSE_WAV, P_FLAC, P_MP3, P_MOD, P_PAUSE_MOD, P_PAUSE_FLAC, P_TTS, P_DAC, P_PAUSE_MP3 } e_CurrentlyPlaying;
-extern volatile e_CurrentlyPlaying CurrentlyPlaying;
+extern volatile e_CurrentlyPlaying CurrentlyPlaying, CurrentlyPlayinge;
 extern unsigned char* WAVInterrupt;
 extern volatile int WAVcomplete;
 extern int WAV_fnbr;
 extern int PWM_FREQ;
 extern char* sbuff1, * sbuff2;
 extern volatile uint64_t bcount[3];
+extern char* sbuff1e, * sbuff2e;
+extern volatile uint64_t bcounte[3];
 extern volatile int wav_filesize;                                    // head and tail of the ring buffer for com1
 extern int trackplaying, trackstoplay;
 extern "C" void checkWAVinput(void);
 extern volatile uint64_t SoundPlay;
-#define WAV_BUFFER_SIZE 65536
+#define WAV_BUFFER_SIZE 16384
+#define EFFECT_BUFFER_SIZE 16384
 extern const unsigned short SineTable[4096];
 extern unsigned short nulltable[4096];
 extern volatile uint64_t bcount[3];
 extern volatile float PhaseM_left, PhaseM_right;
 extern volatile unsigned char PWM_count;
 extern uint16_t* playbuff;
-extern volatile uint64_t bcount[3];
 extern volatile int sound_v_left[MAXSOUNDS];
 extern volatile int sound_v_right[MAXSOUNDS];
 extern volatile float sound_PhaseAC_left[MAXSOUNDS], sound_PhaseAC_right[MAXSOUNDS];
@@ -94,9 +96,10 @@ extern volatile unsigned short* sound_mode_left[MAXSOUNDS];
 extern volatile unsigned short* sound_mode_right[MAXSOUNDS];
 extern const unsigned short whitenoise[2];
 extern const int mapping[101];
-extern volatile int ppos;                                                       // playing position for PLAY WAV
+extern volatile int ppos, ppose;                                                       // playing position for PLAY WAV
 extern volatile float PhaseAC_left, PhaseAC_right;
 extern volatile int swingbuf, nextbuf, playreadcomplete;
+extern volatile int swingbufe, nextbufe, playreadcompletee;
 extern volatile int mono;
 extern volatile int audiorepeat;
 extern "C" void CloseAudio(void);

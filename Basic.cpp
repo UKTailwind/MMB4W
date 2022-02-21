@@ -70,6 +70,8 @@ int PromptFont = 1;
 int64_t PromptFC = M_WHITE, PromptBC = M_BLACK;                             // the font and colours selected at the prompt
 jmp_buf mark;                                                       // longjump to recover from an error and abort
 int  _excep_code = 0;
+char errstring[256] = { 0 };
+int errpos = 0;
 
 using clock_type = std::chrono::high_resolution_clock;
 using namespace std::literals; 
@@ -82,14 +84,14 @@ extern "C" void CheckAbort(void) {
         longjmp(mark, 1);                                           // jump back to the input prompt
     }
 }
-extern "C" int getConsole(void) {
+extern "C" int getConsole(int speed) {
     int c = -1;
     CheckAbort();
     if(ConsoleRxBufHead != ConsoleRxBufTail) {                            // if the queue has something in it
         c = ConsoleRxBuf[ConsoleRxBufTail];
         ConsoleRxBufTail = (ConsoleRxBufTail + 1) % CONSOLE_RX_BUF_SIZE;   // advance the head of the queue
     }
-    else {
+    else if(!speed){
         auto when_started = clock_type::now();
         auto target_time = when_started + 1ms;
         std::this_thread::sleep_until(target_time);
@@ -112,7 +114,7 @@ extern "C" int MMgetchar(void) {
     do {
         ProcessTouch();                                             // check GUI touch
         ShowMMBasicCursor(1);
-        c = getConsole();
+        c = getConsole(0);
     } while (c == -1);
     ShowMMBasicCursor(0);
     return c;
@@ -478,6 +480,7 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     LoadOptions();
     HRes = Option.hres;
     VRes = Option.vres;
+    FullScreen = Option.fullscreen;
     memset(inpbuf, 0, STRINGSIZE);
     memset(tknbuf, 0, STRINGSIZE);
     PixelSize = Option.pixelnum;
@@ -525,7 +528,15 @@ DWORD WINAPI Basic(LPVOID lpParameter)
         WritePage=0;
         ReadPage=0;
         SetFont(Option.DefaultFont);
+        setmode(Option.mode, 0, Option.fullscreen);
         CurrentX = 0;
+        if (errpos) {
+            CloseAllFiles();
+            MMPrintString(errstring);
+            memset(inpbuf, 0, STRINGSIZE);
+        }
+        errpos = 0;
+        errstring[0] = 0;
     }
     else {
         if (lpParameter != NULL) {

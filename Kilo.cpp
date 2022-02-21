@@ -72,7 +72,7 @@ void cutpasteselectCallback(char* cutbuf, int key);
 char lastfileedited[STRINGSIZE] = { 0 };
 //    #define dx(...) {char s[140];sprintf(s,  __VA_ARGS__); SerUSBPutS(s); SerUSBPutS("\r\n");}
 # define TOLOWER(Ch) tolower (Ch)
-int strcasecmp(const char* s1, const char* s2 )
+extern "C" int strcasecmp(const char* s1, const char* s2)
 {
 	const unsigned char* p1 = (const unsigned char*)s1;
 	const unsigned char* p2 = (const unsigned char*)s2;
@@ -226,52 +226,52 @@ struct editorConfig E;
 
 const char* C_HL_extensions[] = { ".bas", ".BAS", ".inc", ".INC",NULL };
 
-const char* C_HL_keywords[] = { "ADC","Arc","AutoSave","Bitbang","Blit",
+const char* C_HL_keywords[] = { "Arc","AutoSave","Blit",
 		"Box","Call","Case","Case Else","cat","Chdir","Circle",
-		"Clear","Close","CLS","Colour","Const",
-		"Continue","Controller","Copy","CSUB","CPU","DAC","Data",
-		"Date","DefineFont","DHT22","Dim","Do",
+		"Clear","Close","CLS","Colour","Console", "Const",
+		"Continue","Copy","CSUB","CPU","Data",
+		"Date","DefineFont","Dim","Do",
 		"Edit","Else","Else If","ElseIf","End",
 		"End DefineFont End Function","End If","End Select","End Sub",
 		"EndIf","Erase","Error","Execute","Exit","Exit Do",
 		"Exit For","Exit Function","Exit Sub","FFT","Files",
 		"Font","For","Framebuffer","Function","GoSub","GoTo","gui",
-		"I2C","I2C2","I2C3","If","Image","Inc",
-		"Input","IR","IReturn","KeyPad","Kill",
-		"LCD","Let","Line","Line Input","List",
+		"If","Image","Inc",
+		"Input","IReturn","Kill",
+		"Let","Line","Line Input","List",
 		"Load","Local","LongString","Loop","Math",
-		"MAP","Memory","Mkdir","MMDEBUG","Mode","Rename",
-		"New","NewEdit","Next","Wii","On",
-		"OneWire","Open","Option","Page","Pause",
-		"Pin","Pixel","Play","Poke","Polygon",
-		"Port","Print","Pulse","PWM","RBox",
+		"Memory","Mkdir","MMDEBUG","Mode","Rename",
+		"New","NewEdit","Next","On",
+		"Open","Option","Page","Pause",
+		"Pixel","Play","Poke","Polygon",
+		"Print","RBox",
 		"Read","Rem","Restore","Return","Rmdir",
-		"Run","Save","Seek","Select Case","Servo",
-		"SetPin","SetTick","Sort","SPI","SPI2",
+		"Run","Save","Seek","Select Case",
+		"SetTick","Sort",
 		"SPRITE","Static","Sub","TEMPR START","Text",
 		"Time","Timer","Trace","Triangle",
 		"TURTLE","VAR","WatchDog","While",
-		"XModem","Abs","ACos","And",
+		"Abs","ACos","And",
 		"As","Asc","ASin","Atan2","Atn",
 		"Baudrate","Bin$","Bin2str$","Choice","Chr$","Cint",
-		"Classic", "Cos","Cwd$","Date$","DateTime$","Day$",
-		"Deg","Dir$","Distance","Else","Eof",
+		"Cos","Cwd$","Date$","DateTime$","Day$",
+		"Deg","Dir$","Else","Eof",
 		"Epoch","Eval","Exp","Field$","Fix",
-		"For","Format$","Getscanline","GoSub","GoTo",
+		"For","Format$","GoSub","GoTo",
 		"GPS","Hex$","Inkey$","Input$","Instr",
 		"Int","inv","KeyDown","LCase$","LCompare","Left$",
 		"Len","LGetByte","LGetStr$","LInStr","LLen","Loc",
-		"Lof","Log","MAP","math","Max","Mid$",
+		"Lof","Log","math","Max","Mid$",
 		"Min","mmdebug","MM.Device$","MM.ErrMsg$","MM.Errno",
-		"MM.HRes","MM.I2C","MM.CMDLINE$",
-		"MM.Info","MM.Info$","MM.OneWire","MM.VRes",
-		"MM.Watchdog","Mod","Mouse","Not","Nunchuk","Oct$",
-		"Or","Peek","Pi","Pin","Pixel",
-		"Port","Pos","Pulsin","Rad","RGB",
+		"MM.HRes","MM.CMDLINE$",
+		"MM.Info","MM.Info$","MM.VRes",
+		"MM.Watchdog","Mod","Mouse","Not","Oct$",
+		"Or","Peek","Pi","Pixel",
+		"Port","Pos","Rad","RGB",
 		"Right$","Rnd","Rnd","Sgn","Sin",
-		"Space$","SPI","SPI2","sprite","Sqr",
+		"Space$","sprite","Sqr",
 		"Step","Str$","Str2bin","String$","Tab",
-		"Tan","TEMPR","Then","Time$","Timer",
+		"Tan","Then","Time$","Timer",
 		"To","UCase$","Until","Val","While",
 		"Xor",  "BASE", "EXPLICIT", "DEFAULT",
 		"NONE", "AUTORUN", "BAUDRATE", "SELECT",
@@ -391,7 +391,7 @@ static int editorReadKey(int cursor, int prompt, int buflen) {
 	do {
 		if (callback == NULL && prompt)MX470Cursor(buflen * gui_font_width, (E.screenrows + 1) * gui_font_height - 2);
 		if (cursor)ShowMMBasicCursor(true);
-		c = getConsole();
+		c = getConsole(0);
 			if (mouse_right && lastR == 0) {
 				lastR = 1;
 				if (mouse_xpos < gui_font_width) {
@@ -1383,7 +1383,7 @@ void editorScroll() {
 	}
 	if (oldrow != E.rowoff || oldcol != E.coloff) {
 		for (i = 0; i < E.numrows; i++)E.row[i].modified = 1;
-		while (getConsole() != -1);
+		while (getConsole(0) != -1);
 	}
 }
 
@@ -1937,7 +1937,7 @@ int editorProcessKeypress() {
 
 	case 0x1b:
 	{
-		int c = getConsole();
+		int c = getConsole(0);
 		if (c == -1) {
 			if (E.dirty && quit_times > 0) {
 				editorSetStatusMessage("WARNING!!! Unsaved changes. "
@@ -1950,7 +1950,7 @@ int editorProcessKeypress() {
 			return 0;
 		}
 		else {
-			while ((c = getConsole()) != -1) {}
+			while ((c = getConsole(0)) != -1) {}
 		}
 	} break;
 	default:
@@ -2035,7 +2035,7 @@ void cmd_newedit(void) {
 		c = lastfileedited;
 		strcpy(q, c);
 	}
-	while (getConsole() != -1) {}
+	while (getConsole(0) != -1) {}
 	initEditor();
 	FILE* fp;
 	if ((fp = fopen((const char*)q, "rb")) != NULL) {

@@ -39,8 +39,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include <strsafe.h>
 #include "picojpeg.h"
 #include "upng.h"
-
+#include "Shlwapi.h"
 extern "C" uint8_t BMP_bDecode(int x, int y, int fnbr);
+extern "C" int strcasecmp(const char* s1, const char* s2);
 int dirflags;
 union uFileTable FileTable[MAXOPENFILES + 1];
 int OptionFileErrorAbort = true;
@@ -67,6 +68,14 @@ typedef struct ss_flist {
     int fs; //file size
     uint64_t fd; //file date
 } s_flist;
+typedef struct sa_dlist {
+    char from[STRINGSIZE];
+    char to[STRINGSIZE];
+} a_dlist;
+a_dlist* dlist;
+
+int nDefines;
+int LineCount = 0;
 
 struct option_s Option;
 extern "C" void ResetOptions(void) {
@@ -90,10 +99,12 @@ extern "C" void ResetOptions(void) {
     Option.KeyboardConfig = CONFIG_UK;
     Option.RepeatStart = 600;
     Option.RepeatRate = 150;
+    Option.fullscreen = false;
     strcpy(Option.defaultpath, (const char *)my_documents);
 }
 int32_t ErrorThrow(int32_t e) {
     MMerrno = e;
+    MMErrMsg = (char*)strerror(e);
     if (e > 0 && e < 41 && OptionFileErrorAbort) error((char*)strerror(e));
     errno = 0;
     return e;
@@ -176,6 +187,12 @@ extern "C" int MMfgetc(int fnbr) {
 // if fnbr == 0 then send the char to the console
 // otherwise the COM port or file opened as #fnbr
 extern "C" unsigned char MMfputc(unsigned char c, int fnbr) {
+    if (fnbr == 99999) {
+        char b[2] = { 0 };
+        b[0] = c;
+        std::cout << b;
+        return c;
+    }
     if(fnbr == 0) return MMputchar(c);                                // accessing the console
     if(fnbr < 1 || fnbr > MAXOPENFILES) error((char *)"File number");
     if(FileTable[fnbr].com == 0) error((char*)"File number is not open");
@@ -200,6 +217,10 @@ extern "C" unsigned char MMfputc(unsigned char c, int fnbr) {
 extern "C" void MMfputs(unsigned char* p, int filenbr) {
     int i;
     i = *p++;
+    if (filenbr == 99999) {
+        std::cout << p;
+        return;
+    }
     if (filenbr == 0) {
         while (i--)MMputchar(*p++);
         return;
@@ -271,8 +292,360 @@ extern "C" int32_t MMfeof(int32_t fnbr) {
     else return SerialRxStatus(FileTable[fnbr].com) == 0;
     return i;
 }
+int cmpstr(char* s1, char* s2)
+{
+    unsigned char* p1 = (unsigned char*)s1;
+    unsigned char* p2 = (unsigned char*)s2;
+    unsigned char c1, c2;
 
-extern "C" int FileLoadProgram(unsigned char* fname, int mode) {
+    if (p1 == p2)
+        return 0;
+
+    do
+    {
+        c1 = tolower(*p1++);
+        c2 = tolower(*p2++);
+        if (c1 == '\0') return 0;
+    } while (c1 == c2);
+
+    return c1 - c2;
+}
+int massage(char* buff) {
+    int i = nDefines;
+    while (i--) {
+        char* p = dlist[i].from;
+        while (*p) {
+            *p = toupper(*p);
+            p++;
+        }
+        p = dlist[i].to;
+        while (*p) {
+            *p = toupper(*p);
+            p++;
+        }
+        STR_REPLACE(buff, dlist[i].from, dlist[i].to);
+    }
+    STR_REPLACE(buff, "=<", "<=");
+    STR_REPLACE(buff, "=>", ">=");
+    STR_REPLACE(buff, " ,", ",");
+    STR_REPLACE(buff, ", ", ",");
+    STR_REPLACE(buff, " *", "*");
+    STR_REPLACE(buff, "* ", "*");
+    STR_REPLACE(buff, "- ", "-");
+    STR_REPLACE(buff, " /", "/");
+    STR_REPLACE(buff, "/ ", "/");
+    STR_REPLACE(buff, "= ", "=");
+    STR_REPLACE(buff, "+ ", "+");
+    STR_REPLACE(buff, " )", ")");
+    STR_REPLACE(buff, ") ", ")");
+    STR_REPLACE(buff, "( ", "(");
+    STR_REPLACE(buff, "> ", ">");
+    STR_REPLACE(buff, "< ", "<");
+    STR_REPLACE(buff, " '", "'");
+    return strlen(buff);
+}
+void importfile(unsigned char* pp, unsigned char* tp, unsigned char** p, uint32_t buf, int convertdebug) {
+    int fnbr;
+    char buff[256];
+    char qq[STRINGSIZE] = { 0 };
+    char num[10];
+    int importlines = 0;
+    int ignore = 0;
+    char* fname, * sbuff, * op, * ip;
+    int c, f, slen, data;
+    fnbr = FindFreeFileNbr();
+    char* q;
+    if ((q = strchr((char *)tp, 34)) == 0) error((char *)"Syntax");
+    q++;
+    if ((q = strchr(q, 34)) == 0) error((char *)"Syntax");
+    fname = (char *)getCstring(tp);
+    if (strchr(&fname[strlen(fname) - 4], '.') == NULL) strcat(fname, ".INC");
+    f = strlen(fname);
+    q = &fname[strlen(fname) - 4];
+    if (strcasecmp(q, ".inc") != 0)error((char *)"must be a .inc file");
+    strcpy(qq, fname);
+    BasicFileOpen(qq, fnbr, (char*)"rb");
+    while (!MMfeof(fnbr)) {
+        int toggle = 0, len = 0;// while waiting for the end of file
+        sbuff = buff;
+        if (((uint32_t)*p - buf) >= EDIT_BUFFER_SIZE - 256 * 6) error((char *)"Not enough memory");
+        memset(buff, 0, 256);
+        MMgetline(fnbr, (char*)buff);									    // get the input line
+        data = 0;
+        importlines++;
+        LineCount++;
+        len = strlen(buff);
+        toggle = 0;
+        for (c = 0; c < (int)strlen(buff); c++) {
+            if (buff[c] == TAB) buff[c] = ' ';
+        }
+        while (*sbuff == ' ') {
+            sbuff++;
+            len--;
+        }
+        if (ignore && sbuff[0] != '#')*sbuff = '\'';
+        if (strncasecmp(sbuff, "rem ", 4) == 0 || (len == 3 && strncasecmp(sbuff, "rem", 3) == 0)) {
+            sbuff += 2;
+            *sbuff = '\'';
+            continue;
+        }
+        if (strncasecmp(sbuff, "data ", 5) == 0)data = 1;
+        slen = len;
+        op = sbuff;
+        ip = sbuff;
+        while (*ip) {
+            if (*ip == 34) {
+                if (toggle == 0)toggle = 1;
+                else toggle = 0;
+            }
+            if (!toggle && (*ip == ' ' || *ip == ':')) {
+                *op++ = *ip++; //copy the first space
+                while (*ip == ' ') {
+                    ip++;
+                    len--;
+                }
+            }
+            else *op++ = *ip++;
+        }
+        slen = len;
+        if (!(toupper(sbuff[0]) == 'R' && toupper(sbuff[1]) == 'U' && toupper(sbuff[2]) == 'N' && (strlen(sbuff) == 3 || sbuff[3] == ' '))) {
+            toggle = 0;
+            for (c = 0; c < slen; c++) {
+                if (!(toggle || data))sbuff[c] = toupper(sbuff[c]);
+                if (sbuff[c] == 34) {
+                    if (toggle == 0)toggle = 1;
+                    else toggle = 0;
+                }
+            }
+        }
+        toggle = 0;
+        for (c = 0; c < slen; c++) {
+            if (sbuff[c] == 34) {
+                if (toggle == 0)toggle = 1;
+                else toggle = 0;
+            }
+            if (!toggle && sbuff[c] == 39 && len == slen) {
+                len = c;//get rid of comments
+                break;
+            }
+        }
+        if (sbuff[0] == '#') {
+            unsigned char* mp = checkstring((unsigned char*)&sbuff[1], (unsigned char *)"DEFINE");
+            if (mp) {
+                getargs(&mp, 3, (unsigned char*)",");
+                if (nDefines >= MAXDEFINES) {
+                    FreeMemorySafe((void**)&buf);
+                    FreeMemorySafe((void**)&dlist);
+                    error((char *)"Too many #DEFINE statements");
+                }
+                strcpy(dlist[nDefines].from, (char *)getCstring(argv[0]));
+                strcpy(dlist[nDefines].to, (char*)getCstring(argv[2]));
+                nDefines++;
+            }
+            else {
+                if (cmpstr((char*)"COMMENT END", &sbuff[1]) == 0)ignore = 0;
+                if (cmpstr((char*)"COMMENT START", &sbuff[1]) == 0)ignore = 1;
+                if (cmpstr((char*)"MMDEBUG ON", &sbuff[1]) == 0)convertdebug = 0;
+                if (cmpstr((char*)"MMDEBUG OFF", &sbuff[1]) == 0)convertdebug = 1;
+                if (cmpstr((char*)"INCLUDE ", &sbuff[1]) == 0) {
+                    error((char *)"Can't import from an import");
+                }
+            }
+        }
+        else {
+            if (toggle)sbuff[len++] = 34;
+            sbuff[len++] = 39;
+            sbuff[len++] = '|';
+            memcpy(&sbuff[len], fname, f);
+            len += strlen(fname);
+            sbuff[len++] = ',';
+            IntToStr(num, importlines, 10);
+            strcpy(&sbuff[len], num);
+            len += strlen(num);
+            if (len > 254) {
+                FreeMemorySafe((void**)&buf);
+                FreeMemorySafe((void**)&dlist);
+                error((char *)"Line too long");
+            }
+            sbuff[len] = 0;
+            len = massage(sbuff); //can't risk crushing lines with a quote in them
+            if ((sbuff[0] != 39) || (sbuff[0] == 39 && sbuff[1] == 39)) {
+/*******                if (Option.profile) {
+                    while (strlen(sbuff) < 9) {
+                        strcat(sbuff, " ");
+                        len++;
+                    }
+                }*/
+                memcpy(*p, sbuff, len);
+                *p += len;
+                **p = '\n';
+                *p += 1;
+            }
+        }
+    }
+    FileClose(fnbr);
+    return;
+}
+// load a file into program memory
+int FileLoadProgram(unsigned char* fname, int mode) {
+    int fnbr, size = 0;
+    char* p, * op, * ip, * buf, * sbuff, name[STRINGSIZE] = { 0 }, buff[STRINGSIZE];
+    char pp[STRINGSIZE] = { 0 };
+    char num[10];
+    int c;
+    int convertdebug = 1;
+    int ignore = 0;
+    nDefines = 0;
+    LineCount = 0;
+    int i, importlines = 0, data;
+    CloseAllFiles();
+    ClearProgram();                                                 // clear any leftovers from the previous program
+    fnbr = FindFreeFileNbr();
+    if (mode)strcpy(buff, (char*)fname);
+    else {
+        p = (char*)getCstring(fname);
+        strcpy(buff, p);
+    }
+    if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
+    if (!BasicFileOpen(buff, fnbr, (char*)"rb")) return false;
+    strcpy(lastfileedited, buff);
+    strcpy(name, buff);
+    i = strlen(name) - 1;
+    while (i > 0 && !(name[i] == 92 || name[i] == 47))i--;
+    memcpy(pp, name, i + 1);
+    p = buf = (char *)GetMemory(EDIT_BUFFER_SIZE);
+    dlist = (a_dlist *)GetMemory(sizeof(a_dlist) * MAXDEFINES);
+
+    while (!MMfeof(fnbr)) {                                     // while waiting for the end of file
+        int toggle = 0, len = 0, slen;// while waiting for the end of file
+        sbuff = buff;
+        if ((p - buf) >= EDIT_BUFFER_SIZE - 256 * 6) error((char *)"Not enough memory");
+        memset(buff, 0, 256);
+        MMgetline(fnbr, (char*)buff);									    // get the input line
+        data = 0;
+        importlines++;
+        LineCount++;
+        len = strlen(buff);
+        toggle = 0;
+        for (c = 0; c < (int)strlen(buff); c++) {
+            if (buff[c] == TAB) buff[c] = ' ';
+        }
+        while (sbuff[0] == ' ') { //strip leading spaces
+            sbuff++;
+            len--;
+        }
+        if (ignore && sbuff[0] != '#')*sbuff = '\'';
+        if (strncasecmp(sbuff, "rem ", 4) == 0 || (len == 3 && strncasecmp(sbuff, "rem", 3) == 0)) {
+            sbuff += 2;
+            *sbuff = '\'';
+            continue;
+        }
+        if (strncasecmp(sbuff, "mmdebug ", 7) == 0 && convertdebug == 1) {
+            sbuff += 6;
+            *sbuff = '\'';
+            continue;
+        }
+        if (strncasecmp(sbuff, "data ", 5) == 0)data = 1;
+        slen = len;
+        op = sbuff;
+        ip = sbuff;
+        while (*ip) {
+            if (*ip == 34) {
+                if (toggle == 0)toggle = 1;
+                else toggle = 0;
+            }
+            if (!toggle && (*ip == ' ' || *ip == ':')) {
+                *op++ = *ip++; //copy the first space
+                while (*ip == ' ') {
+                    ip++;
+                    len--;
+                }
+            }
+            else *op++ = *ip++;
+        }
+        slen = len;
+        if (sbuff[0] == '#') {
+            unsigned char* mp = checkstring((unsigned char*)&sbuff[1], (unsigned char*)"DEFINE");
+            if (mp) {
+                getargs(&mp, 3, (unsigned char*)",");
+                if (nDefines >= MAXDEFINES) {
+                    FreeMemorySafe((void**)&buf);
+                    FreeMemorySafe((void**)&dlist);
+                    error((char *)"Too many #DEFINE statements");
+                }
+                strcpy(dlist[nDefines].from, (char*)getCstring(argv[0]));
+                strcpy(dlist[nDefines].to, (char*)getCstring(argv[2]));
+                nDefines++;
+            }
+            else {
+                if (cmpstr((char*)"COMMENT END", &sbuff[1]) == 0)ignore = 0;
+                if (cmpstr((char*)"COMMENT START", &sbuff[1]) == 0)ignore = 1;
+                if (cmpstr((char*)"MMDEBUG ON", &sbuff[1]) == 0)convertdebug = 0;
+                if (cmpstr((char*)"MMDEBUG OFF", &sbuff[1]) == 0)convertdebug = 1;
+                if (cmpstr((char*)"INCLUDE", &sbuff[1]) == 0) {
+                    importfile((unsigned char*)pp, (unsigned char*)&sbuff[8], (unsigned char**)&p, (uint32_t)buf, convertdebug);
+                }
+            }
+        }
+        else {
+            if (!(toupper(sbuff[0]) == 'R' && toupper(sbuff[1]) == 'U' && toupper(sbuff[2]) == 'N' && (strlen(sbuff) == 3 || sbuff[3] == ' '))) {
+                toggle = 0;
+                for (c = 0; c < slen; c++) {
+                    if (!(toggle || data))sbuff[c] = toupper(sbuff[c]);
+                    if (sbuff[c] == 34) {
+                        if (toggle == 0)toggle = 1;
+                        else toggle = 0;
+                    }
+                }
+            }
+            toggle = 0;
+            for (c = 0; c < slen; c++) {
+                if (sbuff[c] == 34) {
+                    if (toggle == 0)toggle = 1;
+                    else toggle = 0;
+                }
+                if (!toggle && sbuff[c] == 39 && len == slen) {
+                    len = c;//get rid of comments
+                    break;
+                }
+            }
+            if (toggle)sbuff[len++] = 34;
+            sbuff[len++] = 39;
+            sbuff[len++] = '|';
+            IntToStr(num, importlines, 10);
+            strcpy(&sbuff[len], num);
+            len += strlen(num);
+            if (len > 254) {
+                FreeMemorySafe((void**)&buf);
+                FreeMemorySafe((void**)&dlist);
+                error((char *)"Line too long");
+            }
+            sbuff[len] = 0;
+            len = massage(sbuff); //can't risk crushing lines with a quote in them
+            if ((sbuff[0] != 39) || (sbuff[0] == 39 && sbuff[1] == 39)) {
+/*******                if (Option.profile) {
+                    while (strlen(sbuff) < 9) {
+                        strcat(sbuff, " ");
+                        len++;
+                    }
+                }*/
+                memcpy(p, sbuff, len);
+                p += len;
+                *p++ = '\n';
+            }
+        }
+
+    }
+    *p = 0;                                                         // terminate the string in RAM
+    FileClose(fnbr);
+    int load = 0;
+    SaveProgramToMemory((unsigned char*)buf, false);
+    FreeMemorySafe((void**)&buf);
+    FreeMemorySafe((void**)&dlist);
+    return true;
+}
+
+/*extern "C" int FileLoadProgram(unsigned char* fname, int mode) {
     int fnbr;
     char* p, * buf, buff[STRINGSIZE] = { 0 };
     int ch = 0;
@@ -301,7 +674,7 @@ extern "C" int FileLoadProgram(unsigned char* fname, int mode) {
     MMfclose(fnbr);
     SaveProgramToMemory((unsigned char *)buf, false);
     return true;
-}
+}*/
 void LoadImage(unsigned char* p) {
     int fnbr;
     int xOrigin, yOrigin;
@@ -820,7 +1193,7 @@ bool ListDirectoryContents(const char* sDir, const char *mask, int sortorder)
 }
 
 
-char* MMgetcwd(void) {
+extern "C" char* MMgetcwd(void) {
     char* b;
     b = (char *)GetTempMemory(STRINGSIZE);
     int i = 0;
@@ -892,8 +1265,21 @@ void cmd_chdir(void) {
     char* p;
     int i = 0;
     DWORD j = 0;
-    p = (char *)getCstring(cmdline);										// get the directory name and convert to a standard C string
-    i= (int)SetCurrentDirectoryA(p);
+    p = (char *)getCstring(cmdline);
+    for (int i = 0; i < (int)strlen(p); i++)if (p[i] == '/')p[i] = '\\';
+    if (!(p[1] == ':' || p[0] == '\\')) {
+        char* q = (char*)GetTempMemory(STRINGSIZE);
+        char* qq = (char*)GetTempMemory(STRINGSIZE);
+        strcpy(q, MMgetcwd());
+        strcat(q, "\\");
+        strcat(q, p);
+        PathCanonicalizeA(qq, q);
+        i = (int)SetCurrentDirectoryA(qq);
+    }
+    else {
+        i = (int)SetCurrentDirectoryA(p);
+    }
+    // get the directory name and convert to a standard C string
     if (i==0) {
         j = GetLastError();
         error((char*)"Directory error %", j);
@@ -1109,7 +1495,7 @@ void fun_inputstr(void) {
     fnbr = (int)getinteger(argv[2]);
     if (fnbr == 0) {                                                 // accessing the console
         for (i = 1; i <= nbr && kbhitConsole(); i++)
-            sret[i] = getConsole();                                 // get the char from the console input buffer and save in our returned string
+            sret[i] = getConsole(0);                                 // get the char from the console input buffer and save in our returned string
     }
     else {
         if (fnbr < 1 || fnbr > MAXOPENFILES) error((char*)"File number");

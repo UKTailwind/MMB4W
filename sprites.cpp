@@ -1510,7 +1510,7 @@ int x, y, trans;
             ReadPage = WritePage;
             return;
         }
-            MoveBufferNormal(x1, y1, x2, y2, w, h, flip);
+        MoveBufferNormal(x1, y1, x2, y2, w, h, flip);
         ReadPage = WritePage;
     }
 }

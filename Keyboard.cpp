@@ -170,10 +170,10 @@ const unsigned char asciiSW[512] = {
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0  //127
 };
 
-unsigned char KEYLIFO[10] = { 0 };
-int KEYLIFOpointer = 0;
+volatile unsigned char KEYLIFO[10] = { 0 };
+volatile int KEYLIFOpointer = 0;
 static int ctrl = 0, shift = 0, alt = 0, altgr = 0, KE2 = 0, KDC = 0, K81 = 0;
-int numlock=0, scrolllock=0, shiftlock = 0, lastchar=0, repeattime=0;
+int numlock = 0, scrolllock = 0, shiftlock = 0, lastchar = 0, repeattime = 0, modifiers = 0;
 extern "C" void MMPrintString(char* s);
 extern "C" void LIFOadd(int n) {
 	int i, j = 0;
@@ -195,59 +195,15 @@ extern "C" void LIFOremove(int n) {
 			j++;
 		}
 	}
+	for (i = j; i < 10; i++)KEYLIFO[i] = 0;
 	KEYLIFOpointer = j;
 }
 extern "C" void clearrepeat(void) {
-	memset(KEYLIFO, 0, sizeof(KEYLIFO));
+	for(int i=0;i<10;i++)KEYLIFO[i] = 0;
 	KEYLIFOpointer = 0;
 	repeattime = Option.RepeatStart;
 }
-/*extern "C"  void WINAPI EditPaste(VOID)
-{
-	HGLOBAL   hglb;
-	LPTSTR    lptstr;
-	HWND hwnd=NULL;
-	{
-		if (!IsClipboardFormatAvailable(CF_TEXT))
-			return;
-		if (!OpenClipboard(hwnd))
-			return;
 
-		hglb = GetClipboardData(CF_TEXT);
-		if (hglb != NULL)
-		{
-			lptstr = (LPTSTR)GlobalLock(hglb);
-			if (lptstr != NULL)
-			{
-				char* p = (char*)hglb;
-				int lastp = 0;
-				while (*p) {
-					ConsoleRxBuf[ConsoleRxBufHead] = *p++;
-					if (lastp == 13 && ConsoleRxBuf[ConsoleRxBufHead] != 10) {
-						unsigned char c = ConsoleRxBuf[ConsoleRxBufHead];
-						ConsoleRxBuf[ConsoleRxBufHead] = 10;
-						ConsoleRxBufHead = (ConsoleRxBufHead + 1) % CONSOLE_RX_BUF_SIZE;     // advance the head of the queue
-						if (ConsoleRxBufHead == ConsoleRxBufTail) {                           // if the buffer has overflowed
-							ConsoleRxBufTail = (ConsoleRxBufTail + 1) % CONSOLE_RX_BUF_SIZE; // throw away the oldest char
-						}
-						ConsoleRxBuf[ConsoleRxBufHead] = c;
-						lastp = 0;
-					}
-					else lastp = 0;
-					if (ConsoleRxBuf[ConsoleRxBufHead] == 13)lastp = 13;
-					ConsoleRxBufHead = (ConsoleRxBufHead + 1) % CONSOLE_RX_BUF_SIZE;     // advance the head of the queue
-					if (ConsoleRxBufHead == ConsoleRxBufTail) {                           // if the buffer has overflowed
-						ConsoleRxBufTail = (ConsoleRxBufTail + 1) % CONSOLE_RX_BUF_SIZE; // throw away the oldest char
-					}
-				}
-				GlobalUnlock(hglb);
-			}
-		}
-		CloseClipboard();
-
-		return;
-	}
-}*/
 extern "C" void processkey(int i, int mode) {
 	unsigned char* ascii = (unsigned char*)asciiUK;
 	if(Option.KeyboardConfig==CONFIG_US)ascii = (unsigned char*)asciiUS;
@@ -377,17 +333,20 @@ extern "C" void processkey(int i, int mode) {
 		}
 	}
 }
-void MMBasic::CheckKeyBoard(float fElapsedTime) {
+void MMBasic::CheckKeyBoard(void) {
 	int state = 0;
 	shiftlock = (GetKeyState(VK_CAPITAL) & 0x0001);
 	numlock = (GetKeyState(VK_NUMLOCK) & 0x0001);
 	scrolllock = (GetKeyState(VK_SCROLL) & 0x0001);
-//	for (int i = 0; i < 255; i++) {\
-//		if (j = GetKeyState(1)) {
-//			PInt(1);	 PIntHC(j); PRet();
-//		}
-//	}
-	if(GetKeyState(0xE2) & 0x8000) {
+	modifiers= (GetKeyState(VK_LMENU) & 0x8000 ? 1:0) |
+		(GetKeyState(VK_LCONTROL) & 0x8000 ? 2 : 0) |
+		(GetKeyState(VK_LWIN) & 0x8000 ? 4 : 0) |
+		(GetKeyState(VK_LSHIFT) & 0x8000 ? 8 : 0) |
+		(GetKeyState(VK_RMENU) & 0x8000 ? 16 : 0) |
+		(GetKeyState(VK_RCONTROL) & 0x8000 ? 32 : 0) |
+		(GetKeyState(VK_RWIN) & 0x8000 ? 64 : 0) |
+		(GetKeyState(VK_RSHIFT) & 0x8000 ? 128 : 0);
+	if(GetKeyState(VK_OEM_102) & 0x8000) {
 		KE2++;
 		if(KE2==1)processkey(0xE2, 1);
 	} else {

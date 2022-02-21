@@ -359,13 +359,13 @@ int GetCtrlParams(int type, unsigned char* p) {
         GaugeS = (s_GaugeS*)(Ctrl[r].s);
         GaugeS->c1 = -1; GaugeS->c2 = GaugeS->c3 = GaugeS->c4 = gui_fcolour;
         GaugeS->ta = GaugeS->tb = GaugeS->tc = Ctrl[r].max;
-        if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->c1 = (int)getint(argv[a], M_CLEAR, M_WHITE);
+        if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->c1 = getint(argv[a], M_CLEAR, M_WHITE);
         if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->ta = getnumber(argv[a]);
-        if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->c2 = (int)getint(argv[a], M_CLEAR, M_WHITE);
+        if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->c2 = getint(argv[a], M_CLEAR, M_WHITE);
         if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->tb = getnumber(argv[a]);
-        if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->c3 = (int)getint(argv[a], M_CLEAR, M_WHITE);
+        if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->c3 = getint(argv[a], M_CLEAR, M_WHITE);
         if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->tc = getnumber(argv[a]);
-        if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->c4 = (int)getint(argv[a], M_CLEAR, M_WHITE);
+        if (argc > a + 2) if (*argv[a += 2] != 0) GaugeS->c4 = getint(argv[a], M_CLEAR, M_WHITE);
         if (type == CTRL_GAUGE) Ctrl[r].y2 = -1;                     // on first use draw the full gauge
     }
 
@@ -426,7 +426,7 @@ void cmd_gui(void) {
     if ((p = checkstring(cmdline, (unsigned char*)"TEST LCDPANEL"))) {
             int t;
             t = ((HRes > VRes) ? HRes : VRes) / 7;
-            while (getConsole() < '\r') {
+            while (getConsole(0) < '\r') {
                 DrawCircle(rand() % HRes, rand() % VRes, (rand() % t) + t / 5, 1, 1, RGB((rand() % 8) * 256 / 8, (rand() % 8) * 256 / 8, (rand() % 8) * 256 / 8) | 0xFF000000, 1);
             }
             ClearScreen(gui_bcolour);
@@ -711,10 +711,11 @@ void cmd_gui(void) {
 
 
     if ((p = checkstring(cmdline, (unsigned char *)"FCOLOUR")) || (p = checkstring(cmdline, (unsigned char *)"BCOLOUR"))) {
-        int i, r, c;
+        int i, r;
+        int64_t c;
         getargs(&p, MAX_ARG_COUNT, (unsigned char *)",");
         if (!(argc & 1) || argc < 3) error((char *)"Argument count");
-        c = (int)getint(argv[0], M_CLEAR, M_WHITE);
+        c = getint(argv[0], M_CLEAR, M_WHITE);
         for (i = 2; i < argc; i += 2) {
             if (*argv[i] == '#') argv[i]++;
             r = (int)getint(argv[i], 1, MAXCTRLS - 1);
@@ -770,7 +771,7 @@ void cmd_gui(void) {
 void cmd_GUIpage(unsigned char* p) {
     int i, r, OldPages;
 
-    getargs(&cmdline, MAX_ARG_COUNT, (unsigned char *)",");
+    getargs(&p, MAX_ARG_COUNT, (unsigned char *)",");
     if (!(argc & 1)) error((char *)"Argument count");
     OldPages = CurrentPages;
     CurrentPages = 0;

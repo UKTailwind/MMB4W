@@ -191,7 +191,42 @@ void Q_Invert(MMFLOAT* q, MMFLOAT* n) {
 	n[3] = -q[3];
 	n[4] = q[4];
 }
+double sincpi(double x)
+/*
+ * This atrociously slow function call should eventually be replaced
+ * by a tabular approach.
+ */
+{
+	if (x == 0.0)
+		return (1.0);
+	return (sin(M_PI * x) / (M_PI * x));
+}
 
+int upsample(MMFLOAT* x, MMFLOAT* y, int xsamps, MMFLOAT up, MMFLOAT down)
+/*
+ * Convert low frequency data x, having xsamps 16-bit samples, to a
+ * certain number ysamps of high-frequency y samples. The exact
+ * number ysamps is the return value of this function, said value
+ * determined by a formula in the declarations below. The high and
+ * low frequencies are up, down respectively.
+ */
+{
+	double down_ratio = down / up;
+	double a, b;
+	int ysamps = 1 + (int)((xsamps - 6) / down_ratio);
+	int i, j;
+
+	for (j = 0; j < ysamps; j++) {
+		b = j * down_ratio;
+		i = (int)b;
+		a = b - i;
+		y[j] = /*0.5 * */(
+			x[i] * sincpi(2 + a) + x[i + 1] * sincpi(1 + a) +
+			x[i + 2] * sincpi(a) + x[i + 3] * sincpi(1 - a) +
+			x[i + 4] * sincpi(2 - a) + x[i + 5] * sincpi(3 - a));
+	}
+	return (ysamps);
+}
 void cmd_math(void) {
 	unsigned char* tp;
 	int t = T_NBR;
@@ -2042,6 +2077,47 @@ void fun_math(void) {
 			targ = T_NBR;
 			return;
 		}
+	}
+	tp = checkstring(ep, (unsigned char*)"UPSAMPLE");
+	if (tp) {
+		void* ptr1 = NULL;
+		void* ptr2 = NULL;
+		int insize = 0, outsize = 0;
+		MMFLOAT* q1 = NULL, * v1 = NULL, * n = NULL;
+		getargs(&tp, 7, (unsigned char*)",");
+		if (!(argc == 7)) error((char*)"Argument count");
+		ptr1 = findvar(argv[0], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+		if (vartbl[VarIndex].type & T_NBR) {
+			if (vartbl[VarIndex].dims[1] != 0) error((char*)"Invalid variable");
+			if (vartbl[VarIndex].dims[0] <= 0) {		// Not an array
+				error((char*)"Argument 1 must be a floating point array");
+			}
+			insize = vartbl[VarIndex].dims[0] - OptionBase;
+			q1 = (MMFLOAT*)ptr1;
+			if ((uint32_t)ptr1 != (uint32_t)vartbl[VarIndex].val.s)error((char*)"Argument 1 must be a floating point array");
+		}
+
+		else error((char*)"Argument 1 must be a floating point array");
+		ptr2 = findvar(argv[2], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+		if (vartbl[VarIndex].type & T_NBR) {
+			if (vartbl[VarIndex].dims[1] != 0) error((char*)"Invalid variable");
+			if (vartbl[VarIndex].dims[0] <= 0) {		// Not an array
+				error((char*)"Argument 2 must be a floating point array");
+			}
+			outsize = vartbl[VarIndex].dims[0] - OptionBase;
+			v1 = (MMFLOAT*)ptr2;
+			if ((uint32_t)ptr2 != (uint32_t)vartbl[VarIndex].val.s)error((char*)"Argument 2 must be a floating point array");
+		}
+		else error((char*)"Argument 2 must be a floating point array");
+		MMFLOAT infreq = getnumber(argv[4]);
+		if (infreq < 0)error((char*)"Invalid input frequency");
+		MMFLOAT outfreq = getnumber(argv[6]);
+		if (outfreq < infreq)error((char *)"Invalid output frequency");
+		n = (MMFLOAT*)GetTempMemory((int)(outfreq / infreq * (MMFLOAT)insize + 10) * (int)sizeof(MMFLOAT));
+		fret = upsample(q1, n, insize, outfreq, infreq);
+		if (fret > outsize)error((char *)"Output array size");
+		for (int i = 0; i < (int)fret; i++)*v1++ = *n++;
+		return;
 	}
 	error((char *)"Syntax");
 }

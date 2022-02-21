@@ -192,7 +192,7 @@ extern "C" void MoveBufferNormal(int x1, int y1, int x2, int y2, int w, int h, i
 extern "C" void ScrollBufferV(int lines, int blank);
 extern "C" void ScrollBufferH(int pixels);
 extern "C" void closeall3d(void);
-extern "C" void setmode(int mode, int argb);
+extern "C" void setmode(int mode, int argb, bool fullscreen);
 extern int CurrentX, CurrentY;
 extern int64_t gui_fcolour , gui_bcolour ;
 extern int gui_font_width, gui_font_height;

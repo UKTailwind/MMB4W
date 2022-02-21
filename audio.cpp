@@ -50,8 +50,11 @@ volatile e_CurrentlyPlaying CurrentlyPlayinge = P_NOTHING;
 volatile uint64_t SoundPlay;
 volatile int v_left, v_right, vol_left = 100, vol_right = 100;
 volatile int ppos = 0;                                                       // playing position for PLAY WAV
+volatile int ppose = 0;                                                       // playing position for PLAY WAV
 volatile uint64_t bcount[3] = { 0, 0, 0 };
+volatile uint64_t bcounte[3] = { 0, 0, 0 };
 volatile int swingbuf = 0, nextbuf = 0, playreadcomplete = 1;
+volatile int swingbufe = 0, nextbufe = 0, playreadcompletee = 1;
 volatile int wav_filesize;                                                   // head and tail of the ring buffer for com1
 volatile int mono;
 volatile int last_left, last_right, current_left, current_right;
@@ -91,7 +94,8 @@ char* modbuff = NULL;
 int modfilesamplerate = 44100;
 modcontext mcontext;
 int WAV_fnbr = 0;
-char *sbuff1, *sbuff2;
+char *sbuff1=NULL, *sbuff2=NULL;
+char* sbuff1e = NULL, * sbuff2e = NULL;
 const int mapping[101] = { 1,4,11,18,25,33,41,49,57,66,75,84,93,103,113,123,134,145,156,167,179,191,203,216,228,241,255,268,
 282,296,311,325,340,355,371,387,403,419,436,453,470,487,505,523,541,560,578,597,617,636,656,676,
 697,718,738,760,781,803,825,847,870,893,916,940,963,987,1012,1036,1061,1086,1111,1137,1163,1189,1216,
@@ -1018,15 +1022,19 @@ extern "C" void CloseAudio(void) {
     CurrentlyPlaying = P_NOTHING;
     bcount[1] = bcount[2] = wav_filesize = 0;
     swingbuf = nextbuf = playreadcomplete = 0;
-    bSynthPlaying = 0;
-    WAVInterrupt = NULL;
+	bcounte[1] = bcounte[2] = wav_filesize = 0;
+	swingbufe = nextbufe = playreadcompletee = 0;
+	bSynthPlaying = 0;
+//    WAVInterrupt = NULL;
     if (was_playing == P_MP3 || was_playing == P_PAUSE_MP3)drmp3_uninit(&mymp3);
     if (was_playing == P_FLAC || was_playing == P_PAUSE_FLAC)FreeMemorySafe((void**)&myflac);
     ForceFileClose(WAV_fnbr);
     FreeMemorySafe((void**)&modbuff);
     FreeMemorySafe((void**)&sbuff1);
     FreeMemorySafe((void**)&sbuff2);
-    FreeMemorySafe((void**)&mymp3);
+	FreeMemorySafe((void**)&sbuff1e);
+	FreeMemorySafe((void**)&sbuff2e);
+	FreeMemorySafe((void**)&mymp3);
     FreeMemorySafe((void**)&alist);
     memset(&mywav, 0, sizeof(drwav));
     trackstoplay = 0;
@@ -1066,16 +1074,22 @@ void wavcallback(char* p) {
     allocationCallbacks.onRealloc = my_realloc;
     allocationCallbacks.onFree = my_free;
     drwav_init(&mywav, (drwav_read_proc)onRead, (drwav_seek_proc)onSeek, NULL, &allocationCallbacks);
-    if (mywav.sampleRate !=44100)error((char*)"Only 44.1KHz sample rate supported");
-    //        PInt(mywav.channels);MMPrintString(" Channels\r\n");
-    //        PInt(mywav.bitsPerSample);MMPrintString(" Bits per sample\r\n");
-    //        PInt(mywav.sampleRate);MMPrintString(" Sample rate\r\n");
+//    PInt(mywav.channels);MMPrintString((char *)" Channels\r\n");
+//	PInt(mywav.bitsPerSample);MMPrintString((char*)" Bits per sample\r\n");
+//    PInt(mywav.sampleRate);MMPrintString((char*)" Sample rate\r\n");
     FreeMemorySafe((void**)&sbuff1);
     FreeMemorySafe((void**)&sbuff2);
     sbuff1 = (char*)GetMemory(WAV_BUFFER_SIZE*4);
     sbuff2 = (char*)GetMemory(WAV_BUFFER_SIZE*4);
     mono = (mywav.channels == 1 ? 1 : 0);
+	if (SampleRate != mywav.sampleRate || NChannels != mywav.channels) {
+		SampleRate = mywav.sampleRate;
+		NChannels = mywav.channels;
+		SystemMode = MODE_SAMPLERATE;
+		while (SystemMode != MODE_RUN) {}
+	}
     bcount[1] = drwav_read_pcm_frames_f32(&mywav, WAV_BUFFER_SIZE / 2, (float*)sbuff1) * mywav.channels;
+//	PInt(bcount[1]);
     wav_filesize = (int)bcount[1];
     swingbuf = 1;
     nextbuf = 2;
@@ -1103,7 +1117,13 @@ void mp3callback(char* p) {
     sbuff2 = (char*)GetMemory(WAV_BUFFER_SIZE * 4);
     //        PInt(mymp3.sampleRate);MMPrintString((char *)" Sample rate\r\n");
     //        PInt(mymp3.channels);MMPrintString((char *)" Channels\r\n");
-    bcount[1] = drmp3_read_pcm_frames_f32(&mymp3, WAV_BUFFER_SIZE / 2, (float*)sbuff1) * mymp3.channels;
+	if (SampleRate != mymp3.sampleRate || NChannels != 2) {
+		SampleRate = mymp3.sampleRate;
+		NChannels = 2;
+		SystemMode = MODE_SAMPLERATE;
+		while (SystemMode != MODE_RUN) {}
+	}
+	bcount[1] = drmp3_read_pcm_frames_f32(&mymp3, WAV_BUFFER_SIZE / 2, (float*)sbuff1) * mymp3.channels;
 
     wav_filesize = (int)bcount[1];
     swingbuf = 1;
@@ -1133,12 +1153,19 @@ void flaccallback(char* p) {
     FreeMemorySafe((void**)&sbuff2);
     sbuff1 = (char *)GetMemory(WAV_BUFFER_SIZE * 4);
     sbuff2 = (char*)GetMemory(WAV_BUFFER_SIZE * 4);
-    if (myflac->sampleRate !=44100)error((char *)"Only 44.1KHz sample rate supported");
+//    if (myflac->sampleRate !=44100)error((char *)"Only 44.1KHz sample rate supported");
+	
     //	        PInt(myflac->bitsPerSample);MMPrintString(" Bits per sample\r\n");
     //	        PInt(myflac->sampleRate);MMPrintString(" Sample rate\r\n");
     //	       PInt(myflac->totalPCMFrameCount);MMPrintString(" Total Samples\r\n");
     //        PInt(myflac->totalPCMFrameCount/myflac->sampleRate/2);MMPrintString(" Calculated duration in seconds\r\n");
-    bcount[1] = drflac_read_pcm_frames_f32(myflac, WAV_BUFFER_SIZE / 2, (float*)sbuff1) * myflac->channels;
+	if (SampleRate != myflac->sampleRate || NChannels != 2) {
+		SampleRate = myflac->sampleRate;
+		NChannels = 2;
+		SystemMode = MODE_SAMPLERATE;
+		while (SystemMode != MODE_RUN) {}
+	}
+	bcount[1] = drflac_read_pcm_frames_f32(myflac, WAV_BUFFER_SIZE / 2, (float*)sbuff1) * myflac->channels;
     wav_filesize = (int)bcount[1];
     CurrentlyPlaying = P_FLAC;
     swingbuf = 1;
@@ -1216,7 +1243,12 @@ void cmd_play(void) {
 		PhaseM_left = f_left / (float)PWM_FREQ * 4096.0f;
 		PhaseM_right = f_right / (float)PWM_FREQ * 4096.0f;
 		WAV_fnbr = 0;
-
+		if (SampleRate != 44100 || NChannels != 2) {
+			SampleRate = 44100;
+			NChannels = 2;
+			SystemMode = MODE_SAMPLERATE;
+			while (SystemMode != MODE_RUN) {}
+		}
 		SoundPlay = PlayDuration;
 		CurrentlyPlaying = P_TONE;
 		return;
@@ -1242,7 +1274,9 @@ void cmd_play(void) {
         WAVInterrupt = NULL;
         WAVcomplete = 0;
         // open the file
-        if (strchr(p, '.') == NULL) strcat(p, ".MOD");
+		if (argc == 3)modfilesamplerate = (int)getinteger(argv[2]);
+		if (!(modfilesamplerate == 8000 || modfilesamplerate == 16000 || modfilesamplerate == 22050 || modfilesamplerate == 44100 || modfilesamplerate == 48000))error((char *)"Valid rates are 8000, 16000, 22050, 44100, 48000");
+		if (strchr(p, '.') == NULL) strcat(p, ".MOD");
         WAV_fnbr = FindFreeFileNbr();
         if (!BasicFileOpen(p, WAV_fnbr, (char *)"rb")) return;
         i = 0;
@@ -1263,12 +1297,18 @@ void cmd_play(void) {
  //       wav_filesize = WAV_BUFFER_SIZE / 2;
         bcount[1] = WAV_BUFFER_SIZE / 2;
         bcount[2] = 0;
-        CurrentlyPlaying = P_MOD;
+		if (SampleRate != modfilesamplerate || NChannels != 2) {
+			SampleRate = modfilesamplerate;
+			NChannels = 2;
+			SystemMode = MODE_SAMPLERATE;
+			while (SystemMode != MODE_RUN) {}
+		}
         swingbuf = 1;
         nextbuf = 2;
         ppos = 0;
         playreadcomplete = 0;
-        return;
+		CurrentlyPlaying = P_MOD;
+		return;
     }
     if ((tp = checkstring(cmdline, (unsigned char*)"MODSAMPLE"))) {
         unsigned short sampnum, seffectnum;
@@ -1311,36 +1351,6 @@ void cmd_play(void) {
             WAVInterrupt = GetIntAddress(argv[2]);					// get the interrupt location
             InterruptUsed = true;
         }
-        /*FRESULT fr;
-        FILINFO fno;
-        fr = f_stat(p, &fno);
-        if (fno.fattrib == AM_DIR || p[0] == 0) {
-            alist = GetMemory(sizeof(a_flist) * MAXALBUM);
-            trackstoplay = 0;
-            trackplaying = 0;
-            DIR djd;
-            djd.pat = "*.mp3";
-            if (!CurrentLinePtr)MMPrintString((char*)"Directory found - commencing player\r\n");
-            FSerror = f_opendir(&djd, p);
-            for (;;) {
-                fr = f_readdir(&djd, &fno);
-                if (fr != FR_OK || fno.fname[0] == 0) break;  // Break on error or end of dir
-                // Get a directory item
-                if (pattern_matching(djd.pat, fno.fname, 0, 0)) {
-                    if (!CurrentLinePtr) { MMPrintString(fno.fname); PRet(); }
-                    strcpy(alist[trackstoplay].fn, filepath);
-                    if (alist[trackstoplay].fn[strlen(alist[trackstoplay].fn) - 1] != '/')strcat(alist[trackstoplay].fn, "/");
-                    strcat(alist[trackstoplay].fn, p);
-                    strcat(alist[trackstoplay].fn, "/");
-                    strcat(alist[trackstoplay++].fn, fno.fname);
-                }
-            }
-            trackstoplay--;
-            f_closedir(&djd);
-            mp3callback(alist[trackplaying].fn);
-            return;
-        }*/
-        // open the file
         trackstoplay = 0;
         trackplaying = 0;
         mp3callback(p);
@@ -1361,36 +1371,6 @@ void cmd_play(void) {
             WAVInterrupt = GetIntAddress(argv[2]);                  // get the interrupt location
             InterruptUsed = true;
         }
-        /*FRESULT fr;
-        FILINFO fno;
-        fr = f_stat(p, &fno);
-        if (fno.fattrib == AM_DIR || p[0] == 0) {
-            alist = GetInternalMemory(sizeof(a_flist) * MAXALBUM);
-            trackstoplay = 0;
-            trackplaying = 0;
-            DIR djd;
-            djd.pat = "*.flac";
-            if (!CurrentLinePtr)MMPrintString("Directory found - commencing player\r\n");
-            FSerror = f_opendir(&djd, p);
-            for (;;) {
-                fr = f_readdir(&djd, &fno);
-                if (fr != FR_OK || fno.fname[0] == 0) break;  // Break on error or end of dir 
-                // Get a directory item
-                if (pattern_matching(djd.pat, fno.fname, 0, 0)) {
-                    if (!CurrentLinePtr) { MMPrintString(fno.fname); PRet(); }
-                    strcpy(alist[trackstoplay].fn, filepath);
-                    if (alist[trackstoplay].fn[strlen(alist[trackstoplay].fn) - 1] != '/')strcat(alist[trackstoplay].fn, "/");
-                    strcat(alist[trackstoplay].fn, p);
-                    strcat(alist[trackstoplay].fn, "/");
-                    strcat(alist[trackstoplay++].fn, fno.fname);
-                }
-            }
-            trackstoplay--;
-            f_closedir(&djd);
-            flaccallback(alist[trackplaying].fn);
-            return;
-        }*/
-        // open the file
         trackstoplay = 0;
         trackplaying = 0;
         flaccallback(p);
@@ -1413,41 +1393,66 @@ void cmd_play(void) {
             WAVInterrupt = GetIntAddress(argv[2]);					// get the interrupt location
             InterruptUsed = true;
         }
-        /*FRESULT fr;
-        FILINFO fno;
-        fr = f_stat(p, &fno);
-        if (fno.fattrib == AM_DIR || p[0] == 0) {
-            alist = GetInternalMemory(sizeof(a_flist) * MAXALBUM);
-            trackstoplay = 0;
-            trackplaying = 0;
-            DIR djd;
-            djd.pat = "*.wav";
-            if (!CurrentLinePtr)MMPrintString("Directory found - commencing player\r\n");
-            FSerror = f_opendir(&djd, p);
-            for (;;) {
-                fr = f_readdir(&djd, &fno);
-                if (fr != FR_OK || fno.fname[0] == 0) break;  // Break on error or end of dir 
-                // Get a directory item
-                if (pattern_matching(djd.pat, fno.fname, 0, 0)) {
-                    if (!CurrentLinePtr) { MMPrintString(fno.fname); PRet(); }
-                    strcpy(alist[trackstoplay].fn, filepath);
-                    if (alist[trackstoplay].fn[strlen(alist[trackstoplay].fn) - 1] != '/')strcat(alist[trackstoplay].fn, "/");
-                    strcat(alist[trackstoplay].fn, p);
-                    strcat(alist[trackstoplay].fn, "/");
-                    strcat(alist[trackstoplay++].fn, fno.fname);
-                }
-            }
-            trackstoplay--;
-            f_closedir(&djd);
-            wavcallback(alist[trackplaying].fn);
-            return;
-        }*/
-        // open the file
+         // open the file
         trackstoplay = 0;
         trackplaying = 0;
         wavcallback(p);
         return;
     }
+	if ((tp = checkstring(cmdline, (unsigned char *)"EFFECT"))) {
+		unsigned char* p;
+		int i = 0;
+		//        int playing=0;
+		getargs(&tp, 3, (unsigned char*)",");                                  // this MUST be the first executable line in the function
+		if (!(argc == 1 || argc == 3)) error((char *)"Argument count");
+
+		if (!(CurrentlyPlaying == P_MOD)) error((char *)"Effects play over MOD file");
+
+		p = getCstring(argv[0]);                                    // get the file name
+		WAVInterrupt = NULL;
+
+		WAVcomplete = 0;
+		if (argc == 3) {
+			WAVInterrupt = GetIntAddress(argv[2]);					// get the interrupt location
+			InterruptUsed = true;
+		}
+		if (swingbufe) {
+			swingbufe = 0;
+			FileClose(WAV_fnbr);
+			//       	playing=1;
+		   //        	drwav_close(mywav);
+		}
+
+		if (strchr((char*)p, '.') == NULL) strcat((char*)p, ".WAV");
+		WAV_fnbr = FindFreeFileNbr();
+		if (!BasicFileOpen((char*)p, WAV_fnbr, (char*)"rb")) return;
+		drwav_allocation_callbacks allocationCallbacks;
+		//    	int myData;
+		allocationCallbacks.pUserData = &myData;
+		allocationCallbacks.onMalloc = my_malloc;
+		allocationCallbacks.onRealloc = my_realloc;
+		allocationCallbacks.onFree = my_free;
+		drwav_init(&mywav, (drwav_read_proc)onRead, (drwav_seek_proc)onSeek, NULL, &allocationCallbacks);
+		//        PInt(mywav.channels);MMPrintString(" Channels\r\n");
+		//        PInt(mywav.bitsPerSample);MMPrintString(" Bits per sample\r\n");
+		//        PInt(mywav.sampleRate);MMPrintString(" Sample rate\r\n");
+		if (!(mywav.sampleRate == modfilesamplerate))error((char*)"Sample rate must be %Hz", modfilesamplerate);
+		//        if(!playing){
+		sbuff1e = (char *)ReAllocMemory(sbuff1e, EFFECT_BUFFER_SIZE*4);
+		sbuff2e = (char *)ReAllocMemory(sbuff2e, EFFECT_BUFFER_SIZE*4);
+		//        }
+		mono = (mywav.channels == 1 ? 1 : 0);
+		bcounte[1] = drwav_read_pcm_frames_f32(&mywav, EFFECT_BUFFER_SIZE / 2, (float*)sbuff1e) * mywav.channels;
+		playreadcompletee = 0;
+		wav_filesize = (int)bcounte[1];
+		bcounte[2] = 0;
+		swingbufe = 1;
+		nextbufe = 2;
+		ppose = 0;
+		CurrentlyPlayinge = P_WAV;
+		return;
+	}
+
 	if ((tp = checkstring(cmdline, (unsigned char *)"SOUND"))) {//PLAY SOUND channel, type, position, frequency, volume
 		float f_in, PhaseM;
 		int channel, left = 0, right = 0;
@@ -1523,6 +1528,12 @@ void cmd_play(void) {
 			else sound_v_right[channel] = 100 / MAXSOUNDS;
 			sound_v_right[channel] = (sound_v_right[channel] * 41) / 25;
 		}
+		if (SampleRate != 44100 || NChannels != 2) {
+			SampleRate = 44100;
+			NChannels = 2;
+			SystemMode = MODE_SAMPLERATE;
+			while (SystemMode != MODE_RUN) {}
+		}
 		CurrentlyPlaying = P_SOUND;
 		return;
 	}
@@ -1534,17 +1545,17 @@ void cmd_play(void) {
  * Maintain the WAV sample buffer
 *******************************************************************************************/
 void audio_checks(void) {
-    /*    if (playreadcompletee == 1 && CurrentlyPlayinge == P_WAV) {
+        if (playreadcompletee == 1 && CurrentlyPlayinge == P_WAV) {
             if (!(bcounte[1] || bcounte[2])) {// close the WAV output if it has completed
                 FileClose(WAV_fnbr);
                 //            FreeMemorySafe((void *)&sbuff1e);
                 //            FreeMemorySafe((void *)&sbuff2e);
                 WAVcomplete = true;
-                mymemset(&mywav, 0, sizeof(drwav));
+                memset(&mywav, 0, sizeof(drwav));
                 CurrentlyPlayinge = P_NOTHING;
                 playreadcompletee = 0;
             }
-        }*/
+        }
     if (playreadcomplete == 1) {
         if (!(bcount[1] || bcount[2])) {
             if (CurrentlyPlaying == P_FLAC)drflac_close(myflac);
@@ -1610,7 +1621,20 @@ extern "C" void checkWAVinput(void) {
         }
 
     }
-    if (wav_filesize <= 0 && ((CurrentlyPlaying == P_WAV) || (CurrentlyPlaying == P_FLAC) || (CurrentlyPlaying == P_MP3))) {
+	if (swingbufe != nextbufe) { //IR has moved to next buffer
+		if (CurrentlyPlayinge == P_WAV) {
+			if (swingbufe == 2) {
+				bcounte[1] = drwav_read_pcm_frames_f32(&mywav, EFFECT_BUFFER_SIZE / 2, (float*)sbuff1e) * mywav.channels;
+				wav_filesize = (int)bcounte[1];
+			}
+			else {
+				bcounte[2] = drwav_read_pcm_frames_f32(&mywav, EFFECT_BUFFER_SIZE / 2, (float*)sbuff2e) * mywav.channels;
+				wav_filesize = (int)bcounte[2];
+			}
+			nextbufe = swingbufe;
+		}
+	}
+	if (wav_filesize <= 0 && ((CurrentlyPlaying == P_WAV) || (CurrentlyPlaying == P_FLAC) || (CurrentlyPlaying == P_MP3))) {
         if (trackplaying == trackstoplay) {
             playreadcomplete = 1;
         }
@@ -1629,6 +1653,10 @@ extern "C" void checkWAVinput(void) {
             }
         }
     }
+	if (wav_filesize <= 0 && CurrentlyPlaying == P_MOD && CurrentlyPlayinge == P_WAV) {
+		playreadcompletee = 1;
+	}
+
 }
 
 

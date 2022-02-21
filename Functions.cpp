@@ -966,7 +966,7 @@ void fun_inkey(void) {
 
     sret = (unsigned char *)GetTempMemory(STRINGSIZE);									// this buffer is automatically zeroed so the string is zero size
 
-    i = getConsole();
+    i = getConsole(1);
     if(i != -1) {
         sret[0] = 1;												// this is the length
         sret[1] = i;												// and this is the character

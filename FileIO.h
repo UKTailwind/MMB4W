@@ -121,6 +121,7 @@ struct option_s {
     unsigned char F9key[MAXKEYLEN];
     unsigned char DefaultFont;
     unsigned char KeyboardConfig;
+    bool fullscreen;
 } ;
 extern "C" void ResetOptions(void);
 extern struct option_s Option;
@@ -143,6 +144,7 @@ extern "C" void FilePutStr(int count, char* c, int fnbr);
 extern "C" char FileGetChar(int fnbr);
 extern "C" int existsfile(char* fname);
 extern "C" void ForceFileClose(int fnbr);
+extern "C" char* MMgetcwd(void);
 
 extern char lastfileedited[STRINGSIZE];
 extern union uFileTable FileTable[MAXOPENFILES + 1];

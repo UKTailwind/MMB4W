@@ -30,7 +30,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 void flist(int, int, int);
 //void clearprog(void);
 void ListNewLine(int* ListCnt, int all);
-char MMErrMsg[MAXERRMSG];                                           // the error message
+void ListProgramFlash(unsigned char* p, int all);
+char *MMErrMsg=NULL;                                           // the error message
 unsigned char* KeyInterrupt = NULL;
 volatile int Keycomplete = 0;
 int keyselect = 0;
@@ -110,7 +111,9 @@ void execute_one_command(unsigned char* p) {
 	}
 	ClearTempMemory();											    // at the end of each command we need to clear any temporary string vars
 }
-
+void cmd_quit(void) {
+	SystemMode = MODE_QUIT;
+}
 void cmd_inc(void) {
 	unsigned char* p;
 	int vtype;
@@ -241,6 +244,58 @@ void cmd_print(void) {
 	PrintPixelMode = 0;
 }
 
+void cmd_debug(void) {
+	unsigned char* s, * p;
+	MMFLOAT f;
+	long long int  i64;
+	int i, t, fnbr;
+	int docrlf;														// this is used to suppress the cr/lf if needed
+
+	getargs(&cmdline, (MAX_ARG_COUNT * 2) - 1, (unsigned char*)";,");				// this is a macro and must be the first executable stmt
+
+//    s = 0; *s = 56;											    // for testing the exception handler
+
+	docrlf = true;
+
+
+	{
+		fnbr = 99999;													// no file number so default to the standard output
+		i = 0;
+	}
+	for (; i < argc; i++) {											// step through the arguments
+		if (*argv[i] == ',') {
+			MMfputc('\t', fnbr);									// print a tab for a comma
+			docrlf = false;                                         // a trailing comma should suppress CR/LF
+		}
+		else if (*argv[i] == ';') {
+			docrlf = false;											// other than suppress cr/lf do nothing for a semicolon
+		}
+		else {														// we have a normal expression
+			p = argv[i];
+			while (*p) {
+				t = T_NOTYPE;
+				p = evaluate(p, &f, &i64, &s, &t, true);			// get the value and type of the argument
+				if (t & T_NBR) {
+					*inpbuf = ' ';                                  // preload a space
+					FloatToStr((char*)(inpbuf + ((f >= 0) ? 1 : 0)), f, 0, STR_AUTO_PRECISION, ' ');// if positive output a space instead of the sign
+					MMfputs((unsigned char*)CtoM(inpbuf), fnbr);					// convert to a MMBasic string and output
+				}
+				else if (t & T_INT) {
+					*inpbuf = ' ';                                  // preload a space
+					IntToStr((char*)(inpbuf + ((i64 >= 0) ? 1 : 0)), i64, 10); // if positive output a space instead of the sign
+					MMfputs((unsigned char*)CtoM(inpbuf), fnbr);					// convert to a MMBasic string and output
+				}
+				else if (t & T_STR) {
+					MMfputs((unsigned char*)s, fnbr);								// print if a string (s is a MMBasic string)
+				}
+				else error((char*)"Attempt to print reserved word");
+			}
+			docrlf = true;
+		}
+	}
+	if (docrlf) MMfputs((unsigned char*)"\2\r\n", fnbr);								// print the terminating cr/lf unless it has been suppressed
+	PrintPixelMode = 0;
+}
 
 
 // the LET command
@@ -469,6 +524,10 @@ void cmd_list(void) {
 			checkend(p);
 		}
 	}
+	else if ((p = checkstring(cmdline, (unsigned char*)"FLASH"))) {
+		ListProgramFlash((unsigned char*)ProgMemory, false);
+		checkend(p);
+	}
 	else if (p = checkstring(cmdline, (unsigned char *)"PAGES")) {
 		PO("MODE ", 3); MMPrintString((char*)" has "); PInt(MAXPAGES+1); MMPrintString((char*)" pages\r\n");
 		MMPrintString((char*)"Page no.   Page Address   Width   Height   Size  "); PRet();
@@ -695,9 +754,13 @@ void cmd_execute(void) {
 
 void cmd_run(void) {
 	skipspace(cmdline);
-	if (*cmdline && *cmdline != '\'')
-		if (!FileLoadProgram(cmdline,0))
-			return;
+	if (*cmdline && *cmdline != '\'') {
+		if (!FileLoadProgram(cmdline, 0)) return;
+	}
+	else {
+		if (*lastfileedited == 0)error((char*)"Nothing to run");
+		if (!FileLoadProgram((unsigned char *)lastfileedited, 1)) return;
+	}
 	ClearRuntime();
 	WatchdogSet = false;
 	PrepareProgram(true);
@@ -1643,7 +1706,7 @@ void cmd_mid(void) {
 	findvar(argv[0], V_NOFIND_ERR);
 	if(vartbl[VarIndex].type & T_CONST) error((char *)"Cannot change a constant");
 	if(!(vartbl[VarIndex].type & T_STR)) error((char *)"Not a string");
-	char* sourcestring = (char *)getstring(argv[0]);
+	unsigned char* sourcestring = getstring(argv[0]);
 	int start = (int)getint(argv[2], 1, sourcestring[0]);
 	int num = 0;
 	if(argc == 5)num = (int)getint(argv[4], 1, sourcestring[0]);
@@ -1939,27 +2002,27 @@ void cmd_on(void) {
 			return;
 		}
 	}
-	p = checkstring(cmdline, (unsigned char*)"ERROR");
-	if(p) {
-		if(checkstring(p, (unsigned char*)"ABORT")) {
+	p = checkstring(cmdline, (unsigned char *)"ERROR");
+	if (p) {
+		if (checkstring(p, (unsigned char*)"ABORT")) {
 			OptionErrorSkip = 0;
 			return;
 		}
 		MMerrno = 0;                                                // clear the error flags
-		*MMErrMsg = 0;
-		if(checkstring(p, (unsigned char*)"CLEAR")) return;
-		if(checkstring(p, (unsigned char*)"IGNORE")) {
+		if(MMErrMsg!=NULL)*MMErrMsg = 0;
+		if (checkstring(p, (unsigned char*)"CLEAR")) return;
+		if (checkstring(p, (unsigned char*)"IGNORE")) {
 			OptionErrorSkip = -1;
 			return;
 		}
-		if((p = checkstring(p, (unsigned char*)"SKIP"))) {
-			if(*p == 0 || *p == (unsigned char)'\'')
-				OptionErrorSkip = 2;
+		if ((p = checkstring(p, (unsigned char*)"SKIP"))) {
+			if (*p == 0 || *p == '\'')
+				OptionErrorSkip = 1;
 			else
-				OptionErrorSkip = (int)getint(p, 1, 10000) + 1;
+				OptionErrorSkip = (int)getint(p, 1, 10000);
 			return;
 		}
-		error((char *)"Syntax");
+		error((char*)"Syntax");
 	}
 
 	// if we got here the command must be the traditional:  ON nbr GOTO|GOSUB line1, line2,... etc

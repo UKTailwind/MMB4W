@@ -54,9 +54,9 @@ s_camera camera[MAXCAM + 1];
 int VideoMode;
 int CMM1 = 0;
 const int64_t colourmap[16] = { M_BLACK,M_BLUE,M_GREEN,M_CYAN,M_RED,M_MAGENTA,M_YELLOW,M_WHITE,M_MYRTLE,M_COBALT,M_MIDGREEN,M_CERULEAN,M_RUST,M_FUCHSIA,M_BROWN,M_LILAC };
-const int xres[MAXMODES + 1] =         { 0,800,640,320,480,240,256,320,640,1024,848,1280,960,400,960,1280,1920,384,1024 };
-const int yres[MAXMODES + 1] =         { 0,600,400,200,432,216,240,240,480,768,480,720,540,300,540,1024,1080,240,600 };
-const int pixeldensity[MAXMODES + 1] = { 0,  1,  1,  3,  2,  4,  4,  3,  1,  1,  1,  1,  1,  2,  1,  1 ,   1,  3,  1 };
+const int xres[MAXMODES + 1] =         { 0,800,640,320,480,240,256,320,640,1024,848,1280,960,400,960,1280,1920,384,1024};
+const int yres[MAXMODES + 1] =         { 0,600,400,200,432,216,240,240,480,768,480,720,540,300,540,1024,1080,240,600};
+const int pixeldensity[MAXMODES + 1] = { 0,  1,  1,  3,  2,  4,  4,  3,  1,  1,  1,  1,  1,  2,  2,  1 ,   1,  3,  1};
 typedef struct {
     unsigned char red;
     unsigned char green;
@@ -1618,7 +1618,14 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         page += (pageno * SCREENSIZE);
         return (uint32_t*)page;
     }
-    extern "C" void setmode(int mode, int argb) {
+    extern "C" void setmode(int mode, int argb, bool fullscreen) {
+        static int currentmode = 0;
+        static int currenttrans = 0;
+        static bool currentfull = 0;
+        if (mode == currentmode && currenttrans == argb && fullscreen == currentfull)return;
+        currentmode = mode;
+        currenttrans = argb;
+        currentfull = fullscreen;
         ARGBenabled = 0;
         WritePage = 0;
         ReadPage = 0;
@@ -1632,6 +1639,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         ReadPage = 0;
         HRes = xres[mode];
         VRes = yres[mode];
+        FullScreen = fullscreen;
         PixelSize = pixeldensity[mode];
         Option.Height = VRes / gui_font_height;
         Option.Width = HRes / gui_font_width;
@@ -1654,47 +1662,27 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         return;
     }
     void cmd_mode(void) {
-        static int currentmode = Option.mode;
-        static int currenttrans = ARGBenabled;
-        int mode,argb;
+        int mode, argb;
+        bool fullscreen=false;
         unsigned char* p=NULL;
-/*        if (checkstring(p, (unsigned char*)"USER")) {
-            getargs(&cmdline, 5, (unsigned char*)",");
-            WritePage = 0;
-            ReadPage = 0;
-            HRes = (int64_t)getint(argv[0], 100, 3840);
-            VRes = (int64_t)getint(argv[2], 100, 2160);
-            if (PageTable[WPN].address != NULL) {
-                FreeMemorySafe((void**)&PageTable[BPN].address);
-                FreeMemorySafe((void**)&PageTable[WPN].address);
-                PageTable[BPN].address = NULL;
-                PageTable[WPN].address = NULL;
-            }
-            PixelSize = (int64_t)getint(argv[4], 1, 3840 / HRes);
-            for (int i = 0; i <= MAXPAGES; i++) {
-                PageTable[i].address = getpageaddress(i);
-                PageTable[i].xmax = HRes;
-                PageTable[i].ymax = VRes;
-                PageTable[i].size = SCREENSIZE;
-            }
-            SystemMode = MODE_RESIZE;
-            uSec(500000);
-            while (!DisplayActive) {}
-        }
-        else */{
+        {
             getargs(&cmdline, 5, (unsigned char*)",");
             if (!argc)error((char*)"Syntax");
-            mode = (int)getint(argv[0], 1, MAXMODES);
+            mode = (int)getint(argv[0], -MAXMODES, MAXMODES);
+            if (mode == 0)error((char*)"Invalid mode");
             argb = 0;
+            if (mode < 0) {
+                mode = -mode;
+                fullscreen = true;
+            }
             BackGroundColour = M_BLACK;
-            if (argc >= 3)argb = (int)getint(argv[2], 0, 1);
+            if (argc >= 3)argb = (int)getint(argv[2], 0, 32);
+            if (!(argb == 1 || argb == 12))argb = 0;
+            else argb = 1;
             if (argc == 5)BackGroundColour = getint(argv[4], 0, M_WHITE);
-            if (mode == currentmode && currenttrans== argb)return;
-            setmode(mode,argb);
+            setmode(mode,argb, fullscreen);
             gui_fcolour = PromptFC = M_WHITE;
             gui_bcolour = PromptBC = M_BLACK;
-            currentmode = mode;
-            currenttrans = argb;
             VideoMode = mode;
             return;
         }
@@ -2812,7 +2800,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             }
             lbuff = (uint32_t*)buff;
             for (i = 0; i < n; i++) {
-                if (*lbuff)*d++ = *lbuff++;
+                if (*lbuff & (ARGBenabled ? 0xFFFFFFFF : 0xFFFFFF))*d++ = *lbuff++;
                 else {
                     lbuff++;
                     d++;
@@ -2821,7 +2809,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         }
         else {
             for (i = 0; i < n; i++) {
-                if (*s)*d++ = *s++;
+                if (*s & (ARGBenabled ? 0xFFFFFFFF : 0xFFFFFF))*d++ = *s++;
                 else {
                     s++;
                     d++;
@@ -3265,7 +3253,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                 c.rgbbytes[2] = (uint8_t)input[2][y - ys][x - xs];
                 c.rgbbytes[3] = 0;
                 if (c.rgb)c.rgbbytes[3] = 0x0f;
-                if (c.rgb || dontcopyblack == 0)DrawPixel(x, y, c.rgb);
+                if (c.rgb & 0xFFFFFF || dontcopyblack == 0)DrawPixel(x, y, c.rgb);
             }
         }
     }
@@ -3456,7 +3444,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                     //				PInt(xs);PIntComma(ys);PRet();
                     if (xs >= 0 && xs < (int)width && ys >= 0 && ys < (int)height) {
                              c = buff[xs + ys * width];
-                            if (dontcopyblack == 0 || c) {
+                            if (dontcopyblack == 0 || c & 0xFFFFFF) {
                                 yy = y + ny;
                                 xx = x + nx;
 //******                                if (optiony)yy = maxH - 1 - yy;
@@ -3563,7 +3551,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                     for (yy = 0; yy < ye - ys; yy++) {
                         py = (yy * yshift) >> 16;
                         c = buff[px + py * w1];
-                        if (dontcopyblack == 0 || c) {
+                        if (dontcopyblack == 0 || c & 0xFFFFFF) {
                             yp = yy + ys;
                             xp = xx + nx;
 //******                            if (optiony)yy = maxH - 1 - yy;
@@ -3636,7 +3624,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                     for (xx = 0; xx < xe - xs; xx++) {
                         px = (xx * xshift) >> 16;
                         c = buff[px + py * w1];
-                        if (dontcopyblack == 0 || c) {
+                        if (dontcopyblack == 0 || c & 0xFFFFFF) {
                             yp = yy + ny;
                             xp = xx + xs;
 //******                            if (optiony)yy = maxH - 1 - yy;
@@ -3701,46 +3689,22 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                     buff = (uint32_t*)GetTempMemory(w1 * h1 * multiplier);
                 }
                 ReadBuffer(x, y, x + w1 - 1, y + h1 - 1, buff);
-                    if (Scale == 1) {
-                        uint32_t* start1 = (uint32_t*)((ny * maxW + nx) * 4 + wpa);
-                        uint32_t* cout1;
-                        for (int i = 0; i < (float)h2; i++) {
-                            cout1 = start1;
-                            py = (i * y_ratio) >> 16;
-                            for (int j = 0; j < (float)w2; j++) {
-                                px = (j * x_ratio) >> 16;
-                                c = buff[(int)(px + py * w1)];
-                                if (dontcopyblack == 0 || c) {
-                                    *cout1 = c;
-                                }
-                                cout1++;
+                    uint32_t* start1 = (uint32_t*)((ny * maxW + nx) * 4 + wpa);
+                    uint32_t* cout1;
+                    for (int i = 0; i < (float)h2; i++) {
+                        cout1 = start1;
+                        py = (i * y_ratio) >> 16;
+                        for (int j = 0; j < (float)w2; j++) {
+                            px = (j * x_ratio) >> 16;
+                            c = buff[(int)(px + py * w1)];
+                            if (dontcopyblack == 0 || c &0xFFFFFF) {
+                                *cout1 = c;
                             }
-                            start1 += maxW;
+                            cout1++;
                         }
+                        start1 += maxW;
                     }
-                    else {
-                        uint32_t* start1 = (uint32_t*)((ny * 2 * maxW + nx) * 4 + wpa);
-                        uint32_t* start2 = (uint32_t*)(((ny * 2 + 1) * maxW + nx) * 4 + wpa);
-                        uint32_t* cout1, * cout2;
-                        for (int i = 0; i < (float)h2; i++) {
-                            py = (i * y_ratio) >> 16;
-                            cout1 = start1;
-                            cout2 = start2;
-                            for (int j = 0; j < (float)w2; j++) {
-                                px = (j * x_ratio) >> 16;
-                                c = buff[(int)(px + py * w1)];
-                                if (dontcopyblack == 0 || c) {
-                                    *cout1 = c;
-                                    *cout2 = c;
-                                }
-                                cout1++;
-                                cout2++;
-                            }
-                            start1 += (maxW << 1);
-                            start2 += (maxW << 1);
-                        }
-                    }
-            }
+             }
             ReadPage = WritePage;
             return;
         }
