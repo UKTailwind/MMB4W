@@ -202,6 +202,7 @@ extern  unsigned char* FontTable[];
 extern const int xres[] ;
 extern const int yres[] ;
 extern const int pixeldensity[] ;
+extern const int defaultfont[];
 struct s_pagetable {
 	uint32_t* address;	//points to the framebuffer for the page
 	uint16_t xmax;		//store width

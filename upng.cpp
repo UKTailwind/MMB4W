@@ -1177,8 +1177,9 @@ upng_t* upng_new_from_bytes(const unsigned char* buffer, unsigned long size)
 	return upng;
 }
 
-upng_t* upng_new_from_file(char* filename)
+upng_t* upng_new_from_file(char* fname)
 {
+	char filename[STRINGSIZE] = { 0 };
 	unsigned char* buffer, * buff;
 	int fnbr;
 	int size, fullsize;
@@ -1189,8 +1190,7 @@ upng_t* upng_new_from_file(char* filename)
 	if (upng == NULL) {
 		return NULL;
 	}
-
-	if (strchr(filename, '.') == NULL) strcat(filename, ".PNG");
+	fullfilename(fname, filename, ".PNG");
 	fnbr = FindFreeFileNbr();
 	if (!BasicFileOpen(filename, fnbr, (char *)"rb")) return 0;
 

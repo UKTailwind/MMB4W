@@ -81,7 +81,7 @@ void fun_test(void);
 void fun_bound(void);
 void fun_ternary(void);
 void fun_call(void);
-
+void fun_cmdline(void);
 
 #endif
 
@@ -162,6 +162,8 @@ void fun_call(void);
 { (unsigned char*)"Bin2str$(",  T_FUN | T_STR,			0, fun_bin2str },
 { (unsigned char*)"Str2bin(",	T_FUN | T_NBR | T_INT,	0, fun_str2bin },
 { (unsigned char*)"Call(",		T_FUN | T_STR | T_INT | T_NBR,		0, fun_call },
+{ (unsigned char*)"MM.CmdLine$",T_FNA | T_STR,			0, fun_cmdline },
+
 #endif
 #if !defined(INCLUDE_COMMAND_TABLE) && !defined(INCLUDE_TOKEN_TABLE)
 #define RADCONV   (MMFLOAT)57.2957795130823229	  // Used when converting degrees -> radians and vice versa

@@ -84,7 +84,6 @@ typedef enum _M_Req { M_PROG, M_VAR } M_Req;
 extern  "C" void m_alloc(int type);
 extern  "C" void* GetMemory(int  msize);
 extern  "C" void* GetTempMemory(int NbrBytes);
-extern  "C" void* GetTempStrMemory(void);
 extern  "C" void ClearTempMemory(void);
 extern  "C" void ClearSpecificTempMemory(void* addr);
 extern  "C" void TestStackOverflow(void);
