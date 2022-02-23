@@ -102,7 +102,7 @@ void MX470Display(int fn) {
         break;
     case SCROLL_DOWN:
         break;
-    case DRAW_LINE:         DrawBox(0, gui_font_height * (Option.Height - 2), HRes - 1, VRes - 1, 0, 0, gui_bcolour);
+    case DRAW_LINE:         DrawBox(0, gui_font_height * (OptionHeight - 2), HRes - 1, VRes - 1, 0, 0, gui_bcolour);
         DrawLine(0, VRes - gui_font_height - 6, HRes - 1, VRes - gui_font_height - 6, 1, GUI_C_LINE);
         CurrentX = 0; CurrentY = VRes - gui_font_height;
         break;
@@ -162,8 +162,8 @@ void cmd_edit(void) {
     EdBuff = (unsigned char *)GetTempMemory(EDIT_BUFFER_SIZE);
     *EdBuff = 0;
 
-    VHeight = Option.Height - 2;
-    VWidth = Option.Width;
+    VHeight = OptionHeight - 2;
+    VWidth = OptionWidth;
     edx = edy = curx = cury = y = x = tempx = 0;
     txtp = EdBuff;
     *tknbuf = 0;

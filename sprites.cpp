@@ -36,7 +36,9 @@ char* COLLISIONInterrupt = NULL;
 int CollisionFound = false;
 int sprite_which_collided = -1;
 static int hideall = 0;
-struct blitbuffer blitbuff[MAXBLITBUF] = { 0 };											//Buffer pointers for the BLIT command
+struct blitbuffer blitbuff[MAXBLITBUF] = { 0 };		
+extern "C" void fullfilename(char* infile, char* outfile, const char* extension);
+//Buffer pointers for the BLIT command
 void LIFOadd(int n) {
     int i, j = 0;
     for (i = 0; i < LIFOpointer; i++) {
@@ -718,6 +720,7 @@ void showsafe(int bnbr, int x, int y) {
 }
 void loadsprite(unsigned char* p) {
     int fnbr, width, number, height = 0, newsprite = 1, startsprite = 1, bnbr, lc, i;
+    char filename[STRINGSIZE] = { 0 };
     char* q, * fname;
     short* qq;
     uint32_t* qqq=NULL;
@@ -726,8 +729,8 @@ void loadsprite(unsigned char* p) {
     fnbr = FindFreeFileNbr();
     fname = (char*)getCstring(argv[0]);
     if (argc == 3)startsprite = (int)getint(argv[2], 1, 64);
-    if (strchr(fname, '.') == NULL) strcat((char*)p, ".SPR");
-    if (!BasicFileOpen(fname, fnbr, (char *)"rb")) error((char *)"File not found");
+    fullfilename(fname, filename, ".SPR");
+    if (!BasicFileOpen(filename, fnbr, (char *)"rb")) error((char *)"File not found");
     MMgetline(fnbr, (char*)buff);							    // get the input line
     while (buff[0] == 39)MMgetline(fnbr, (char*)buff);
     sscanf((char*)buff, "%d,%d, %d", &width, &number, &height);
@@ -1140,8 +1143,7 @@ void cmd_blit(void) {
         if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
     }
     else if ((p = checkstring(cmdline, (unsigned char*)"TRANSPARENCY"))) {
-//******
-int x, y, trans;
+        int x, y, trans;
         getargs(&p, 3, (unsigned char*)",");
         if (!(ARGBenabled))error((char *)"Invalid for this display mode");
         if (argc != 3) error((char *)"Syntax");

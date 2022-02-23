@@ -42,6 +42,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "Shlwapi.h"
 extern "C" uint8_t BMP_bDecode(int x, int y, int fnbr);
 extern "C" int strcasecmp(const char* s1, const char* s2);
+void tidypath(char* p, char* qq);
 int dirflags;
 union uFileTable FileTable[MAXOPENFILES + 1];
 int OptionFileErrorAbort = true;
@@ -92,14 +93,15 @@ extern "C" void ResetOptions(void) {
     Option.hres = xres[Option.mode];
     Option.vres = yres[Option.mode];
     Option.pixelnum = pixeldensity[Option.mode];
-    Option.Height = Option.hres / gui_font_height;
-    Option.Width = Option.vres / gui_font_width;
+    Option.Height = Option.vres / gui_font_height;
+    Option.Width = Option.hres / gui_font_width;
     Option.DefaultFC = M_WHITE;
     Option.DefaultBC = M_BLACK;
     Option.KeyboardConfig = CONFIG_UK;
     Option.RepeatStart = 600;
     Option.RepeatRate = 150;
     Option.fullscreen = false;
+    Option.ColourCode = true;
     strcpy(Option.defaultpath, (const char *)my_documents);
 }
 int32_t ErrorThrow(int32_t e) {
@@ -124,13 +126,33 @@ extern "C" char FileGetChar(int fnbr) {
     return ch;
 }
 extern "C" int existsfile(char* fname) {
-    int fr = 0;
-    FILE* fp;
-    if ((fp = fopen((const char*)fname, "r")) != NULL) {
-        fclose(fp);
-        fr = 1;
-    }
-    return fr;
+    char filename[STRINGSIZE] = { 0 };
+    char path[STRINGSIZE] = { 0 };
+    char q[STRINGSIZE] = { 0 };
+    strcpy(q, fname);
+    tidyfilename(q, path, filename);
+    strcpy(q, path);
+    strcat(q, filename);
+    MMPrintString(q); PRet(); 
+    WIN32_FIND_DATAA fdFile;
+    HANDLE hFind = NULL;
+    if ((hFind = FindFirstFileA((LPCSTR)q, &fdFile)) == INVALID_HANDLE_VALUE)return  0;
+    FindClose(hFind);
+    return 1;
+}
+extern "C" int64_t filesize(char* fname) {
+    char filename[STRINGSIZE] = { 0 };
+    char path[STRINGSIZE] = { 0 };
+    char q[STRINGSIZE] = { 0 };
+    strcpy(q, fname);
+    tidyfilename(q, path, filename);
+    strcpy(q, path);
+    strcat(q, filename);
+    WIN32_FIND_DATAA fdFile;
+    HANDLE hFind = NULL;
+     if ((hFind = FindFirstFileA((LPCSTR)q, &fdFile)) == INVALID_HANDLE_VALUE)return  -1;
+    FindClose(hFind);
+    return  ((int64_t)fdFile.nFileSizeHigh << 32) | (int64_t)fdFile.nFileSizeLow;
 }
 // fname must be a standard C style string (not the MMBasic style)
 void MMfopen(char* fname, char* mode, int32_t fnbr) {
@@ -193,7 +215,9 @@ extern "C" unsigned char MMfputc(unsigned char c, int fnbr) {
         std::cout << b;
         return c;
     }
-    if(fnbr == 0) return MMputchar(c);                                // accessing the console
+    if (fnbr == 0) {
+        return MMputchar(c);
+    }// accessing the console
     if(fnbr < 1 || fnbr > MAXOPENFILES) error((char *)"File number");
     if(FileTable[fnbr].com == 0) error((char*)"File number is not open");
     if (FileTable[fnbr].com > MAXCOMPORTS) {
@@ -218,11 +242,13 @@ extern "C" void MMfputs(unsigned char* p, int filenbr) {
     int i;
     i = *p++;
     if (filenbr == 99999) {
-        std::cout << p;
+        while (i--)MMfputc(*p++,99999);
         return;
     }
     if (filenbr == 0) {
-        while (i--)MMputchar(*p++);
+        while (i--) {
+            MMputchar(*p++);
+        }
         return;
     }
     if (filenbr < 1 || filenbr > MAXOPENFILES) error((char*)"File number");
@@ -344,7 +370,7 @@ int massage(char* buff) {
     STR_REPLACE(buff, " '", "'");
     return strlen(buff);
 }
-void importfile(unsigned char* pp, unsigned char* tp, unsigned char** p, uint32_t buf, int convertdebug) {
+void importfile(unsigned char* path, unsigned char* filename, unsigned char** p, uint32_t buf, int convertdebug) {
     int fnbr;
     char buff[256];
     char qq[STRINGSIZE] = { 0 };
@@ -355,15 +381,23 @@ void importfile(unsigned char* pp, unsigned char* tp, unsigned char** p, uint32_
     int c, f, slen, data;
     fnbr = FindFreeFileNbr();
     char* q;
-    if ((q = strchr((char *)tp, 34)) == 0) error((char *)"Syntax");
+    if ((q = strchr((char *)filename, 34)) == 0) error((char *)"Syntax");
     q++;
     if ((q = strchr(q, 34)) == 0) error((char *)"Syntax");
-    fname = (char *)getCstring(tp);
-    if (strchr(&fname[strlen(fname) - 4], '.') == NULL) strcat(fname, ".INC");
-    f = strlen(fname);
-    q = &fname[strlen(fname) - 4];
-    if (strcasecmp(q, ".inc") != 0)error((char *)"must be a .inc file");
+    fname = (char *)getCstring(filename);
     strcpy(qq, fname);
+    for (int i = 0; i < (int)strlen(qq); i++) if(qq[i] == '/')qq[i] = '\\';
+    if (!(qq[1] == ':' || qq[0] == '\\')) { //filename is relative path to "path"
+        char q[STRINGSIZE] = { 0 };
+        strcpy(q, (char *)path);
+        if (path[strlen(q) - 1] != '\\')strcat(q, "\\");
+        strcat(q, qq);
+        PathCanonicalizeA(qq, q);
+    }
+    f = strlen(qq);
+    if (strchr((char*)qq, '.') == NULL) strcat((char*)qq, (char *)"INC");
+    q = &qq[strlen(qq) - 4];
+    if (strcasecmp(q, ".inc") != 0)error((char *)"must be a .inc file");
     BasicFileOpen(qq, fnbr, (char*)"rb");
     while (!MMfeof(fnbr)) {
         int toggle = 0, len = 0;// while waiting for the end of file
@@ -487,9 +521,10 @@ void importfile(unsigned char* pp, unsigned char* tp, unsigned char** p, uint32_
     return;
 }
 // load a file into program memory
-int FileLoadProgram(unsigned char* fname, int mode) {
+int FileLoadProgram(unsigned char* fn, int mode) {
     int fnbr, size = 0;
     char* p, * op, * ip, * buf, * sbuff, name[STRINGSIZE] = { 0 }, buff[STRINGSIZE];
+    char path[STRINGSIZE] = { 0 };
     char pp[STRINGSIZE] = { 0 };
     char num[10];
     int c;
@@ -497,22 +532,24 @@ int FileLoadProgram(unsigned char* fname, int mode) {
     int ignore = 0;
     nDefines = 0;
     LineCount = 0;
-    int i, importlines = 0, data;
+    int importlines = 0, data;
     CloseAllFiles();
     ClearProgram();                                                 // clear any leftovers from the previous program
     fnbr = FindFreeFileNbr();
-    if (mode)strcpy(buff, (char*)fname);
+    if (mode)strcpy(buff, (char*)fn);
     else {
-        p = (char*)getCstring(fname);
+        p = (char*)getCstring(fn);
         strcpy(buff, p);
     }
+    tidyfilename(buff, path, name);
+    strcpy(buff, path);
+    strcat(buff, name);
     if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
     if (!BasicFileOpen(buff, fnbr, (char*)"rb")) return false;
     strcpy(lastfileedited, buff);
-    strcpy(name, buff);
-    i = strlen(name) - 1;
-    while (i > 0 && !(name[i] == 92 || name[i] == 47))i--;
-    memcpy(pp, name, i + 1);
+    strcpy(Option.lastfilename, buff);
+    SaveOptions();
+    strcpy(pp, name);
     p = buf = (char *)GetMemory(EDIT_BUFFER_SIZE);
     dlist = (a_dlist *)GetMemory(sizeof(a_dlist) * MAXDEFINES);
 
@@ -583,7 +620,7 @@ int FileLoadProgram(unsigned char* fname, int mode) {
                 if (cmpstr((char*)"MMDEBUG ON", &sbuff[1]) == 0)convertdebug = 0;
                 if (cmpstr((char*)"MMDEBUG OFF", &sbuff[1]) == 0)convertdebug = 1;
                 if (cmpstr((char*)"INCLUDE", &sbuff[1]) == 0) {
-                    importfile((unsigned char*)pp, (unsigned char*)&sbuff[8], (unsigned char**)&p, (uint32_t)buf, convertdebug);
+                    importfile((unsigned char*)path, (unsigned char*)&sbuff[8], (unsigned char**)&p, (uint32_t)buf, convertdebug);
                 }
             }
         }
@@ -644,56 +681,32 @@ int FileLoadProgram(unsigned char* fname, int mode) {
     FreeMemorySafe((void**)&dlist);
     return true;
 }
-
-/*extern "C" int FileLoadProgram(unsigned char* fname, int mode) {
-    int fnbr;
-    char* p, * buf, buff[STRINGSIZE] = { 0 };
-    int ch = 0;
-    CloseAllFiles();
-    ClearProgram();                                                 // clear any leftovers from the previous program
-    fnbr = FindFreeFileNbr();
-    if(mode)strcpy(buff, (char *)fname);
-    else {
-        p = (char*)getCstring(fname);
-        strcpy(buff, p);
-    }
-    if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
-    if (!BasicFileOpen(buff, fnbr, (char *)"rb")) return false;
-    p = buf = (char *)GetTempMemory(EDIT_BUFFER_SIZE);              // get all the memory while leaving space for the couple of buffers defined and the file handle
-    while (!MMfeof(fnbr)) {                                         // while waiting for the end of file
-        if ((p - buf) >= EDIT_BUFFER_SIZE - 512) error((char *)"Not enough memory");
-        if (fread(&ch, 1, 1, FileTable[fnbr].fptr) == 0) error((char*)"File Read");
-        if (isprint(ch) || ch == '\r' || ch == '\n' || ch == TAB) {
-            if (ch == TAB) ch = ' ';
-            *p++ = ch;                                               // get the input into RAM
-        }
-    }
-    strcpy(lastfileedited, buff);
-
-    *p = 0;                                                         // terminate the string in RAM
-    MMfclose(fnbr);
-    SaveProgramToMemory((unsigned char *)buf, false);
-    return true;
-}*/
 void LoadImage(unsigned char* p) {
     int fnbr;
     int xOrigin, yOrigin;
+    char fname[STRINGSIZE] = { 0 };
 
     // get the command line arguments
     getargs(&p, 5, (unsigned char*)",");                                            // this MUST be the first executable line in the function
     if (argc == 0) error((char*)"Argument count");
 
     p = getCstring(argv[0]);                                        // get the file name
-
+    int maxH = PageTable[WritePage].ymax;
+    fullfilename((char*)p, fname, ".BMP");
     xOrigin = yOrigin = 0;
     if (argc >= 3) xOrigin = (int)getinteger(argv[2]);                    // get the x origin (optional) argument
-    if (argc == 5) yOrigin = (int)getinteger(argv[4]);                    // get the y origin (optional) argument
+    if (argc == 5) {
+        yOrigin = (int)getinteger(argv[4]);                    // get the y origin (optional) argument
+        if (optiony) yOrigin = maxH - 1 - yOrigin;
+    }
 
     // open the file
-    if (strchr((const char*)p, '.') == NULL) strcat((char*)p, ".BMP");
     fnbr = FindFreeFileNbr();
-    if (!BasicFileOpen((char*)p, fnbr, (char*)"rb")) return;
+    if (!BasicFileOpen(fname, fnbr, (char*)"rb")) return;
+    int savey = optiony;
+    optiony = 0;
     BMP_bDecode(xOrigin, yOrigin, fnbr);
+    optiony = savey;
     FileClose(fnbr);
 }
 
@@ -717,6 +730,8 @@ void LoadJPGImage(unsigned char* p) {
     int mcu_y = 0;
     uint32_t row_pitch;
     uint8_t status;
+    int maxH = PageTable[WritePage].ymax;
+    int maxW = PageTable[WritePage].xmax;
     gCoeffBuf = (int16_t*)GetTempMemory(8 * 8 * sizeof(int16_t));
     gMCUBufR = (uint8_t*)GetTempMemory(256);
     gMCUBufG = (uint8_t*)GetTempMemory(256);
@@ -727,6 +742,7 @@ void LoadJPGImage(unsigned char* p) {
     gHuffVal3 = (uint8_t*)GetTempMemory(256);
     gInBuf = (uint8_t*)GetTempMemory(PJPG_MAX_IN_BUF_SIZE);
     g_nInFileSize = g_nInFileOfs = 0;
+    char fname[STRINGSIZE] = { 0 };
 
     uint32_t decoded_width, decoded_height;
     int xOrigin, yOrigin;
@@ -736,15 +752,18 @@ void LoadJPGImage(unsigned char* p) {
     if (argc == 0) error((char *)"Argument count");
 
     p = getCstring(argv[0]);                                        // get the file name
-
+    fullfilename((char*)p, fname, ".JPG");
     xOrigin = yOrigin = 0;
     if (argc >= 3) xOrigin = (int)getint(argv[2], 0, HRes - 1);                    // get the x origin (optional) argument
-    if (argc == 5) yOrigin = (int)getint(argv[4], 0, VRes - 1);                    // get the y origin (optional) argument
+    if (argc == 5) {
+        yOrigin = (int)getint(argv[4], 0, VRes - 1);
+        if (optiony) yOrigin = maxH - 1 - yOrigin;
+    }
+    // get the y origin (optional) argument
 
     // open the file
-    if (strchr((const char *)p, '.') == NULL) strcat((char *)p, ".JPG");
     jpgfnbr = FindFreeFileNbr();
-    if (!BasicFileOpen((char *)p, jpgfnbr, (char*)"rb")) return;
+    if (!BasicFileOpen(fname, jpgfnbr, (char*)"rb")) return;
     fseek(FileTable[jpgfnbr].fptr, 0L, SEEK_END);
     g_nInFileSize = ftell(FileTable[jpgfnbr].fptr);
     fseek(FileTable[jpgfnbr].fptr, 0L, SEEK_SET);
@@ -763,6 +782,8 @@ void LoadJPGImage(unsigned char* p) {
     decoded_height = image_info.m_height;
 
     row_pitch = image_info.m_MCUWidth * image_info.m_comps;
+    int savey = optiony;
+    optiony = 0;
 
     unsigned char* imageblock = (uint8_t *)GetTempMemory(image_info.m_MCUHeight * image_info.m_MCUWidth * image_info.m_comps);
     unsigned char* newblock = (uint8_t*)GetTempMemory(image_info.m_MCUHeight * image_info.m_MCUWidth * sizeof(uint32_t));
@@ -778,6 +799,7 @@ void LoadJPGImage(unsigned char* p) {
             if (status != PJPG_NO_MORE_BLOCKS)
             {
                 FileClose(jpgfnbr);
+                optiony = savey;
                 error((char*)"pjpeg_decode_mcu() failed with status %", status);
             }
             break;
@@ -786,15 +808,10 @@ void LoadJPGImage(unsigned char* p) {
         if (mcu_y >= image_info.m_MCUSPerCol)
         {
             FileClose(jpgfnbr);
+            optiony = savey;
             return;
         }
-        /*    for(int i=0;i<image_info.m_MCUHeight*image_info.m_MCUWidth ;i++){
-                  imageblock[i*3+2]=image_info.m_pMCUBufR[i];
-                  imageblock[i*3+1]=image_info.m_pMCUBufG[i];
-                  imageblock[i*3]=image_info.m_pMCUBufB[i];
-              }*/
-              //         pDst_row = pImage + (mcu_y * image_info.m_MCUHeight) * row_pitch + (mcu_x * image_info.m_MCUWidth * image_info.m_comps);
-
+ 
         for (y = 0; y < image_info.m_MCUHeight; y += 8)
         {
             const int by_limit = std::min(8, image_info.m_height - (mcu_y * image_info.m_MCUHeight + y));
@@ -873,6 +890,7 @@ void LoadJPGImage(unsigned char* p) {
         }
         if (y >= VRes) { //nothing useful left to process
             FileClose(jpgfnbr);
+            optiony = savey;
             return;
         }
         mcu_x++;
@@ -882,6 +900,7 @@ void LoadJPGImage(unsigned char* p) {
             mcu_y++;
         }
     }
+    optiony = savey;
     FileClose(jpgfnbr);
 }
 void LoadPNG(unsigned char* p) {
@@ -890,17 +909,19 @@ void LoadPNG(unsigned char* p) {
     int maxW = PageTable[WritePage].xmax;
     int maxH = PageTable[WritePage].ymax;
     upng_t* upng;
+    char fname[STRINGSIZE] = { 0 };
     // get the command line arguments
     getargs(&p, 7, (unsigned char *)",");                                            // this MUST be the first executable line in the function
     if (argc == 0) error((char *)"Argument count");
 
     p = getCstring(argv[0]);                                        // get the file name
+    fullfilename((char*)p, fname, ".PNG");
 
     xOrigin = yOrigin = 0;
     if (argc >= 3 && *argv[2]) xOrigin = (int)getinteger(argv[2]);                    // get the x origin (optional) argument
     if (argc >= 5 && *argv[4]) {
         yOrigin = (int)getinteger(argv[4]);                    // get the y origin (optional) argument
-//******        if (optiony) yOrigin = maxH - 1 - yOrigin;
+        if (optiony) yOrigin = maxH - 1 - yOrigin;
     }
     if (argc == 7)transparent = (int)getint(argv[6], 0, 15);
     if (transparent) {
@@ -908,10 +929,9 @@ void LoadPNG(unsigned char* p) {
         transparent = 4;
     }
     // open the file
-    if (strchr((const char*)p, '.') == NULL) strcat((char*)p, ".PNG");
     //	fnbr = FindFreeFileNbr();
     //    if(!BasicFileOpen(p, fnbr, FA_READ)) return;
-    upng = upng_new_from_file((char *)p);
+    upng = upng_new_from_file(fname);
     upng_header(upng);
     w = upng_get_width(upng);
     h = upng_get_height(upng);
@@ -926,15 +946,15 @@ void LoadPNG(unsigned char* p) {
     upng_decode(upng);
     unsigned char* rr;
     rr = (unsigned char*)upng_get_buffer(upng);
-//******    int savey = optiony;
-//    optiony = 0;
+    int savey = optiony;
+    optiony = 0;
     if (upng_get_format(upng) == 3) {
         DrawBuffer32(xOrigin, yOrigin, xOrigin + w - 1, yOrigin + h - 1, (char*)rr, 3 | transparent | force);
     }
     else {
         DrawBuffer32(xOrigin, yOrigin, xOrigin + w - 1, yOrigin + h - 1, (char*)rr, 2 | transparent | force);
     }
-//    optiony = savey;
+    optiony = savey;
     upng_free(upng);
     //    FileClose(fnbr);
     clearrepeat();
@@ -964,13 +984,14 @@ void cmd_load(void) {
         int fnbr;
         unsigned int nbr;
         char* pp;
+        char fname[STRINGSIZE] = { 0 };
         getargs(&p, 3, (unsigned char*)",");
         if (argc != 3)error((char*)"Syntax");
         pp = (char *)getCstring(argv[0]);
-        if (strchr(pp, '.') == NULL) strcat(pp, ".DAT");
+        fullfilename((char*)pp, fname, ".DAT");
         uint32_t address = (GetPokeAddr(argv[2]) & 0b11111111111111111111111111111100);
         fnbr = FindFreeFileNbr();
-        if (!BasicFileOpen(pp, fnbr, (char*)"rb")) return;
+        if (!BasicFileOpen(fname, fnbr, (char*)"rb")) return;
         fseek(FileTable[fnbr].fptr, 0L, SEEK_END);
         uint32_t size = ftell(FileTable[fnbr].fptr);
         fseek(FileTable[fnbr].fptr, 0L, SEEK_SET);
@@ -1158,7 +1179,7 @@ bool ListDirectoryContents(const char* sDir, const char *mask, int sortorder)
         MMPrintString(flist[i].fn + 1);
         MMPrintString((char*)"\r\n");
         // check if it is more than a screen full
-        if (++ListCnt >= Option.Height && i < fcnt) {
+        if (++ListCnt >= OptionHeight && i < fcnt) {
             MMPrintString((char*)"PRESS ANY KEY ...");
             do {
                 ShowCursor(1);
@@ -1201,26 +1222,71 @@ extern "C" char* MMgetcwd(void) {
     if (i == 0)error((char*)"Directory error %", GetLastError());
     return b;
 }
+extern "C" bool dirExists(const char * dirName_in)
+{
+    DWORD ftyp = GetFileAttributesA(dirName_in);
+    if (ftyp == INVALID_FILE_ATTRIBUTES)
+        return false;  //something is wrong with your path!
 
+    if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
+        return true;   // this is a directory!
+
+    return false;    // this is not a directory!
+}
+void tidypath(char* p, char* qq) {
+    strcpy(qq, p);
+    for (int i = 0; i < (int)strlen(qq); i++)if (qq[i] == '/')qq[i] = '\\';
+    if (!(qq[1] == ':' || qq[0] == '\\')) {
+        char* q = (char*)GetTempMemory(STRINGSIZE);
+        strcpy(q, MMgetcwd());
+        strcat(q, "\\");
+        strcat(q, qq);
+        PathCanonicalizeA(qq, q);
+//        if (qq[strlen(qq) - 1] != '\\')strcat(qq, "\\");
+    }
+}
+extern "C" void tidyfilename(char* p, char* path, char* filename) {
+    char q[STRINGSIZE] = { 0 };
+    char r[STRINGSIZE] = { 0 };
+    strcpy(q, p);
+    for (int i = 0; i < (int)strlen(q); i++)if (q[i] == '/')q[i] = '\\';
+    int i = strlen(q) - 1;
+    while (i > 0 && q[i] != '\\')i--;
+    if (i > 0) {
+        memcpy(r, q, i);
+        tidypath(r, path);
+        i++;
+    }
+    else {
+        strcpy(path, MMgetcwd());
+    }
+    if (!(path[strlen(path) - 1] == '/' || path[strlen(path) - 1] == '\\'))strcat(path, "\\");
+    strcpy(filename, &p[i]);
+}
+extern "C" void fullfilename(char* infile, char* outfile, const char * extension) {
+    char q[STRINGSIZE] = { 0 };
+    char filename[STRINGSIZE] = { 0 };
+    char path[STRINGSIZE] = { 0 };
+    strcpy(q, infile);
+    tidyfilename(q, path, filename);
+    strcpy(q, path);
+    strcat(q, filename);
+    if (strchr((char*)q, '.') == NULL && extension != NULL) strcat((char*)q, extension);
+    strcpy(outfile, q);
+}
 void cmd_files(void) {
-    int i, j;
     char* p;
     int sortorder = 0;
-    char ts[STRINGSIZE] = { 0 };
-    char pp[STRINGSIZE] = { 0 };
+    char filename[STRINGSIZE] = { 0 };
+    char path[STRINGSIZE] = { 0 };
     char q[STRINGSIZE] = { 0 };
+    if (CurrentLinePtr) error((char*)"Invalid in a program");
     if (*cmdline) {
         getargs(&cmdline, 3, (unsigned char *)",");
         if (!(argc == 1 || argc == 3))error((char*)"Syntax");
         p = (char*)getCstring(argv[0]);
-        i = strlen(p) - 1;
-        while (i > 0 && !(p[i] == 92 || p[i] == 47))i--;
-        if (i > 0) {
-            memcpy(q, p, i);
-            for (j = 0; j < (int)strlen(q); j++)if (q[j] == (char)'\\')q[j] = '/';  //allow backslash for the DOS oldies
-            i++;
-        }
-        strcpy(pp, &p[i]);
+        strcpy(q, p);
+        if (q[strlen(q) - 1] == '/' || q[strlen(q) - 1] == '\\')strcat(q, "*");
         if (argc == 3) {
             if (checkstring(argv[2], (unsigned char*)"NAME"))sortorder = 0;
             else if (checkstring(argv[2], (unsigned char*)"TIME"))sortorder = 1;
@@ -1229,28 +1295,9 @@ void cmd_files(void) {
             else error((char*)"Syntax");
         }
     }
-    if (pp[0] == 0)strcpy(pp, "*");
-    if (CurrentLinePtr) error((char*)"Invalid in a program");
-    if (!*q) {
-        MMPrintString((char*)MMgetcwd());
-        MMPrintString((char*)"\r\n");
-        ListDirectoryContents(MMgetcwd(), (const char*)pp, sortorder);
-    }  else {
-        if (!(q[1] == ':' || q[0] == '\\' || q[0] == '/')) {
-            strcpy(ts, MMgetcwd());
-            strcat(ts, "\\");
-            strcat(ts, q);
-            strcat(ts, "\\");
-            MMPrintString(ts);
-            MMPrintString((char*)"\r\n");
-            ListDirectoryContents((const char*)q, (const char*)pp, sortorder);
-        }
-        else {
-            MMPrintString(ts);
-            MMPrintString((char*)"\r\n");
-            ListDirectoryContents((const char*)q, (const char*)pp, sortorder);
-        }
-    }
+    else strcpy(q, ".\\*");
+    tidyfilename(q, path, filename);
+    ListDirectoryContents((const char*)path, (const char*)filename, sortorder);
 }
 void fun_cwd(void) {
     MMerrno = 0;
@@ -1262,24 +1309,14 @@ void cmd_chdir(void) {
         SetCurrentDirectoryA(Option.defaultpath);
         return;
     }
+    char* qq = (char*)GetTempMemory(STRINGSIZE);
     char* p;
     int i = 0;
     DWORD j = 0;
     p = (char *)getCstring(cmdline);
-    for (int i = 0; i < (int)strlen(p); i++)if (p[i] == '/')p[i] = '\\';
-    if (!(p[1] == ':' || p[0] == '\\')) {
-        char* q = (char*)GetTempMemory(STRINGSIZE);
-        char* qq = (char*)GetTempMemory(STRINGSIZE);
-        strcpy(q, MMgetcwd());
-        strcat(q, "\\");
-        strcat(q, p);
-        PathCanonicalizeA(qq, q);
-        i = (int)SetCurrentDirectoryA(qq);
-    }
-    else {
-        i = (int)SetCurrentDirectoryA(p);
-    }
     // get the directory name and convert to a standard C string
+    tidypath(p, qq);
+    i= (int)SetCurrentDirectoryA(qq);
     if (i==0) {
         j = GetLastError();
         error((char*)"Directory error %", j);
@@ -1337,6 +1374,7 @@ void cmd_save(void) {
     int maxW = HRes;
     fnbr = FindFreeFileNbr();
     if ((p = checkstring(cmdline, (unsigned char *)"IMAGE")) != NULL) {
+        char filename[STRINGSIZE] = { 0 };
         union colourmap
         {
             char rgbbytes[4];
@@ -1348,18 +1386,22 @@ void cmd_save(void) {
         char bmppad[3] = { 0,0,0 };
         getargs(&p, 9, (unsigned char*)",");
         pp = getCstring(argv[0]);
+        fullfilename((char *)pp, filename, ".BMP");
         if (argc != 1 && argc != 9)error((char*)"Syntax");
-        if (strchr((char *)pp, '.') == NULL) strcat((char*)pp, ".BMP");
-        if (!BasicFileOpen((char*)pp, fnbr, (char *)"wb")) return;
+        if (!BasicFileOpen(filename, fnbr, (char *)"wb")) return;
         if (argc == 1) {
             x = 0; y = 0; h = maxH; w = maxW;
         }
         else {
             x = (int)getint(argv[2], 0, maxW - 1);
+            if (optiony) x = maxW - 1 - x;
             y = (int)getint(argv[4], 0, maxH - 1);
+            if (optiony) y = maxH - 1 - y;
             w = (int)getint(argv[6], 1, maxW - x);
             h = (int)getint(argv[8], 1, maxH - y);
         }
+        int savey = optiony;
+        optiony = 0;
         filesize = 54 + 3 * w * h;
         bmpfileheader[2] = (unsigned char)(filesize);
         bmpfileheader[3] = (unsigned char)(filesize >> 8);
@@ -1388,9 +1430,11 @@ void cmd_save(void) {
             if ((w * 3) % 4 != 0) FilePutStr(4 - ((w * 3) % 4), bmppad, fnbr);
         }
         MMfclose(fnbr);
+        optiony = savey;
         return;
     }
-    else {
+    error((char *)"Syntax");
+/*    else {
         unsigned char b[STRINGSIZE];
         p = getCstring(cmdline);                           // get the file name and change to the directory
         if (strchr((char *)p, '.') == NULL) strcat((char*)p, ".BAS");
@@ -1404,12 +1448,13 @@ void cmd_save(void) {
             if (p[0] == 0 && p[1] == 0) break;                       // end of the listing ?
         }
         MMfclose(fnbr);
-    }
+    }*/
 }
 void cmd_open(void) {
     int32_t fnbr;
     char* mode = NULL, * fname;
     unsigned char ss[3];														// this will be used to split up the argument line
+    char filename[STRINGSIZE] = { 0 };
 
     ss[0] = tokenFOR;
     ss[1] = tokenAS;
@@ -1417,7 +1462,7 @@ void cmd_open(void) {
     // start a new block
     getargs(&cmdline, 5, ss);									// getargs macro must be the first executable stmt in a block
     fname = (char *)getCstring(argv[0]);
-
+    fullfilename(fname, filename, NULL);
     if (!(argc == 3 || argc == 5)) error((char*)"Syntax");
     if (argc == 5) {
         if (checkstring(argv[2], (unsigned char*)"OUTPUT"))
@@ -1432,7 +1477,7 @@ void cmd_open(void) {
             error((char*)"Invalid file access mode");
         if (*argv[4] == '#') argv[4]++;
         fnbr = (int)getinteger(argv[4]);
-        BasicFileOpen(fname, fnbr, mode);
+        BasicFileOpen(filename, fnbr, mode);
     }
     else {
         if (*argv[2] == '#') argv[2]++;
@@ -1605,6 +1650,8 @@ void cmd_copy(void) {
     unsigned char* oldf, * newf, ss[2] = { 0 };
     char c;
     int32_t of, nf;
+    char oldfilename[STRINGSIZE] = { 0 };
+    char newfilename[STRINGSIZE] = { 0 };
 
     ss[0] = tokenTO;                                 // this will be used to split up the argument line
     ss[1] = 0;
@@ -1613,14 +1660,14 @@ void cmd_copy(void) {
         if (argc != 3) error((char*)"Syntax");
         oldf = getCstring(argv[0]);                                  // get the old file name and convert to a standard C string
         newf = getCstring(argv[2]);                                  // get the new file name and convert to a standard C string
-
+        fullfilename((char *)oldf, oldfilename, NULL);
+        fullfilename((char*)newf, newfilename, NULL);
         of = FindFreeFileNbr();
         if (of == 0) error((char*)"Too many files open");
-        MMfopen((char*)oldf, (char*)"r", of);
-
+        BasicFileOpen((char*)oldfilename, of, (char*)"rb");
         nf = FindFreeFileNbr();
         if (nf == 0) error((char*)"Too many files open");
-        MMfopen((char*)newf, (char*)"w", nf); 										// We'll just overwrite any existing file
+        BasicFileOpen((char*)newfilename, nf, (char*)"wb");
     }
     while (1) {
         if (MMfeof(of)) break;
@@ -1662,12 +1709,8 @@ void fun_dir(void) {
         char ts[STRINGSIZE];
         found_OK = 0;
         p=getCstring(argv[0]);
-        if (!(p[1] == ':' || p[0] == '\\' || p[0] == '/')) {
-            strcpy(ts, MMgetcwd());
-            strcat(ts, "\\");
-            strcat(ts, (const char*)p);
-        } else strcpy(ts, (const char*)p);
-        for (int j = 0; j < (int)strlen(ts); j++)if (ts[j] == (char)'\\')ts[j] = '/';  //allow backslash for the DOS oldies
+        // get the directory name and convert to a standard C string
+        tidypath((char *)p, ts);
         if (hFind) {
             FindClose(hFind);
             hFind = NULL;
@@ -1745,16 +1788,21 @@ void fun_dir(void) {
 }
 
 void cmd_mkdir(void) {
-    unsigned char* p;
-
-    p = getCstring(cmdline);										// get the directory name and convert to a standard C string
-    if (!CreateDirectoryA((LPCSTR)p, NULL )) error((char *)"Unable to create directory");
+    char* qq = (char*)GetTempMemory(STRINGSIZE);
+    char* p;
+    p = (char*)getCstring(cmdline);
+    // get the directory name and convert to a standard C string
+    tidypath(p, qq);
+    if (!CreateDirectoryA((LPCSTR)qq, NULL )) error((char *)"Unable to create directory");
 }
 void cmd_rmdir(void) {
-    unsigned char* p;
-
-    p = getCstring(cmdline);										// get the directory name and convert to a standard C string
-    if (!RemoveDirectoryA((LPCSTR)p)) error((char*)"Unable to delete directory");
+    char* qq = (char*)GetTempMemory(STRINGSIZE);
+    char* p;
+    p = (char*)getCstring(cmdline);
+    // get the directory name and convert to a standard C string
+    tidypath(p, qq);
+    if(!dirExists((const char*) qq)) error((char *)"Directory does not exist");
+    if (!RemoveDirectoryA((LPCSTR)qq)) error((char*)"Unable to delete directory");
 }
 
 void fun_port(void) {

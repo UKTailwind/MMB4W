@@ -62,7 +62,7 @@ extern unsigned char* CFunctionLibrary;
 extern int MMCharPos;
 extern int PromptFont;
 extern int64_t PromptFC, PromptBC;
-extern int  _excep_code;
+extern volatile int  _excep_code;
 extern volatile int HRes, VRes, PixelSize;
 extern volatile unsigned int PauseTimer;                            // this is used in the PAUSE command
 extern volatile unsigned int IntPauseTimer;
@@ -70,6 +70,7 @@ extern volatile long long int mSecTimer;
 extern volatile unsigned int MouseTimer;
 extern volatile unsigned int MouseProcTimer;
 extern volatile unsigned int ScrewUpTimer;
+extern volatile unsigned int WDTimer;
 extern volatile int keytimer;
 extern volatile int TOUCH_DOWN;
 extern volatile int SystemMode;
@@ -98,6 +99,8 @@ extern volatile float fFilterVolumeL;
 extern volatile float fFilterVolumeR;
 extern int SampleRate;
 extern int NChannels;
+extern int OptionHeight;
+extern int OptionWidth;
 
 extern bool FullScreen;
 extern "C" unsigned char MMputchar(unsigned char c);

@@ -114,7 +114,7 @@ static void MX470Display(int fn) {
 		break;
 	case SCROLL_DOWN:
 		break;
-	case DRAW_LINE:         DrawBox(0, gui_font_height * (Option.Height - 2), maxW - 1, maxH - 1, 0, 0, gui_bcolour);
+	case DRAW_LINE:         DrawBox(0, gui_font_height * (OptionHeight - 2), maxW - 1, maxH - 1, 0, 0, gui_bcolour);
 		DrawLine(0, maxH - gui_font_height - 6, maxW - 1, maxH - gui_font_height - 6, 1, GUI_C_LINE);
 		CurrentX = 0; CurrentY = maxH - gui_font_height;
 		break;
@@ -175,7 +175,7 @@ enum editorHighlight {
 
 #define HL_HIGHLIGHT_NUMBERS (1 << 0)
 #define HL_HIGHLIGHT_STRINGS (1 << 1)
-#define defaultprompt ((Option.Width < 52) ? defaultpromptverybig : (Option.Width < 100) ? defaultpromptbig : defaultpromptsmall)
+#define defaultprompt ((OptionWidth < 52) ? defaultpromptverybig : (OptionWidth < 100) ? defaultpromptbig : defaultpromptsmall)
 
 /*** data ***/
 
@@ -670,7 +670,7 @@ int editorSyntaxToColor(int hl) {
 
 void editorSelectSyntaxHighlight() {
 	E.syntax = NULL;
-	if (E.filename == NULL)
+	if (E.filename == NULL || Option.ColourCode != true)
 		return;
 
 	char* ext = strrchr(E.filename, '.');
@@ -923,6 +923,7 @@ void BufferCheck(void) {
 }
 void BufferSaveAs(int c) {
 	char p[STRINGSIZE];
+	char q[STRINGSIZE];
 	strcpy(p, E.filename);
 	strcpy(E.filename, editorPrompt((char*)"Backup as: %s  (ESC to cancel)\033[K", 11));
 	if (strlen(E.filename) == 0) {
@@ -931,13 +932,16 @@ void BufferSaveAs(int c) {
 		showdefault = 2;
 		return;
 	}
+	fullfilename(E.filename, q, NULL);
+	strcpy(E.filename, q);
 	BufferSave(0);
 	strcpy(E.filename, p);
 	showdefault = 2;
 	clearrepeat();
 }
 void editorInsert(int q) {
-	char p[255];
+	char p[STRINGSIZE];
+	char qq[STRINGSIZE];
 	int fnbr;
 	int fr = 0;
 	strcpy(p, E.filename);
@@ -948,12 +952,9 @@ void editorInsert(int q) {
 		showdefault = 2;
 		return;
 	}
-	if (strchr(E.filename, '.') == NULL) strcat(E.filename, ".BAS");
-	FILE* fp;
-	if ((fp = fopen((const char*)E.filename, "rb")) != NULL) {
-		fclose(fp);
-		fr = 1;
-	}
+	fullfilename(E.filename, qq, NULL);
+	strcpy(E.filename, qq);
+	fr = existsfile(E.filename);
 	if (!fr) { //file doesn't exist
 		editorSetStatusMessage("File not found\033[K");
 		strcpy(E.filename, p);
@@ -1494,7 +1495,7 @@ void editorDrawMessageBar(struct abuf* ab) {
 
 void editorRefreshScreen(void) {
 	//	  abfree(&ab);
-	memset(ab.b, 0, Option.Height * Option.Width * 8);
+	memset(ab.b, 0, OptionHeight * OptionWidth * 8);
 	editorScroll();
 	ab.len = 0;
 	abAppend(&ab, "\033[?25l", 6);
@@ -1971,9 +1972,9 @@ int editorProcessKeypress() {
 void setterminal(void) {
 	char sp[50] = { 0 };
 	strcpy(sp, "\033[8;");
-	IntToStr(&sp[strlen(sp)], (long long int)Option.Height, 10);
+	IntToStr(&sp[strlen(sp)], (long long int)OptionHeight, 10);
 	strcat(sp, ";");
-	IntToStr(&sp[strlen(sp)], (long long int)Option.Width + 1, 10);
+	IntToStr(&sp[strlen(sp)], (long long int)OptionWidth + 1, 10);
 	strcat(sp, "t");
 //	SerUSBPutS(sp);						//
 }
@@ -1992,11 +1993,11 @@ void initEditor() {
 	E.insert = 1;
 	E.cutpastebuffersize = 0;
 	setterminal();
-	E.screenrows = Option.Height;
-	E.screencols = Option.Width;
+	E.screenrows = OptionHeight;
+	E.screencols = OptionWidth;
 	E.screenrows -= 2;
 	E.lastkey = 0;
-	ab.b = (char *)GetMemory(Option.Height * Option.Width * 8);
+	ab.b = (char *)GetMemory(OptionHeight * OptionWidth * 8);
 	E.helpbuff = (char*)GetMemory(STRINGSIZE);
 }
 
@@ -2008,8 +2009,6 @@ void cmd_newedit(void) {
 //******	sendCRLF = 3;
 	int fr = 0;
 	if (CurrentLinePtr) error((char*)"Invalid in a program");
-//	setmode(Option.mode);
-//	SetFont(Option.DefaultFont);
 	MX470Display(DISPLAY_CLS);                          // clear screen on the MX470 display only
 	MX470Cursor(0, 0);                                  // home the cursor
 	SerialCloseAll();                             // same for serial ports
@@ -2017,19 +2016,13 @@ void cmd_newedit(void) {
 	closeallsprites();
 	closeall3d();
 	if (!(*cmdline == 0 || *cmdline == '\'')) {
-		c = (char *)getCstring(cmdline);
-		strcpy(q, c);
+		fullfilename((char*)getCstring(cmdline), q, NULL);
 		if (strchr(q, '.') == NULL) {
-			FILE* fp;
-			if ((fp = fopen((const char*)q, "r")) != NULL) {
-				fclose(fp);
-				fr = 1;
-			}
+			fr = existsfile(q);
 			if (!fr)strcat(q, ".BAS");
 		}
 		StartEditLine = StartEditCharacter = 0;
 	}
-	
 	else {
 		if (!*lastfileedited)error((char*)"Nothing to edit");
 		c = lastfileedited;
@@ -2037,11 +2030,7 @@ void cmd_newedit(void) {
 	}
 	while (getConsole(0) != -1) {}
 	initEditor();
-	FILE* fp;
-	if ((fp = fopen((const char*)q, "rb")) != NULL) {
-		fclose(fp);
-		fr = 1;
-	}
+	fr = existsfile(q);
 	if (!fr ) { //file doesn't exist
 		int fnbr;
 		char b = 0;
@@ -2051,11 +2040,7 @@ void cmd_newedit(void) {
 		fnbr = FindFreeFileNbr();
 		BasicFileOpen(E.filename, fnbr, (char*)"wb");
 		FileClose(fnbr);
-		strcpy((char*)inpbuf, "KILL \"");
-		strcat((char*)inpbuf, E.filename);
-		strcat((char*)inpbuf, "\"\r\n");
-		tokenise(true);                                             // turn into executable code
-		ExecuteProgram(tknbuf);                                     // execute the line straight away
+		remove((char*)E.filename);
 		memset(inpbuf, 0, STRINGSIZE);
 		editorSelectSyntaxHighlight();
 		StartEditLine = 0;

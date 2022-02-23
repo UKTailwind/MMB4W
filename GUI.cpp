@@ -751,8 +751,10 @@ void cmd_gui(void) {
     }
 
     if ((p = checkstring(cmdline, (unsigned char*)"BEEP"))) {
-        ClickTimer = (int)getint(p, 0, INT_MAX) + 1;
-        bSynthPlaying = true;
+        getargs(&p, 1, (unsigned char*)",");
+        int bl = 500;
+        if (argc == 1)bl = (int)getint(p, 1, INT_MAX);
+        beep(bl,650.0f);
         return;
     }
 

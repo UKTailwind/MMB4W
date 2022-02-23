@@ -122,6 +122,7 @@ struct option_s {
     unsigned char DefaultFont;
     unsigned char KeyboardConfig;
     bool fullscreen;
+    char lastfilename[STRINGSIZE];
 } ;
 extern "C" void ResetOptions(void);
 extern struct option_s Option;
@@ -145,7 +146,11 @@ extern "C" char FileGetChar(int fnbr);
 extern "C" int existsfile(char* fname);
 extern "C" void ForceFileClose(int fnbr);
 extern "C" char* MMgetcwd(void);
-
+extern "C" void tidyfilename(char* p, char* path, char* filename);
+extern "C" int64_t filesize(char* fname);
+extern "C" int existsfile(char* fname);
+extern "C" void fullfilename(char* infile, char* outfile, const char * extension);
+extern "C" bool dirExists(const char* dirName_in);
 extern char lastfileedited[STRINGSIZE];
 extern union uFileTable FileTable[MAXOPENFILES + 1];
 #endif

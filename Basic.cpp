@@ -69,14 +69,18 @@ const char DaysInMonth[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
 int PromptFont = 1;
 int64_t PromptFC = M_WHITE, PromptBC = M_BLACK;                             // the font and colours selected at the prompt
 jmp_buf mark;                                                       // longjump to recover from an error and abort
-int  _excep_code = 0;
 char errstring[256] = { 0 };
 int errpos = 0;
+int OptionHeight;
+int OptionWidth;
 
 using clock_type = std::chrono::high_resolution_clock;
 using namespace std::literals; 
 extern "C" void CheckAbort(void) {
     if (CurrentlyPlaying == P_WAV || CurrentlyPlaying == P_FLAC || CurrentlyPlaying == P_MP3 || CurrentlyPlaying == P_MOD)checkWAVinput();
+    if (_excep_code) {
+        SoftReset();
+    }
     if(MMAbort) {
         WDTimer = 0;                                                // turn off the watchdog timer
         memset(inpbuf, 0, STRINGSIZE);
@@ -100,6 +104,11 @@ extern "C" int getConsole(int speed) {
 }
 
 extern "C" unsigned char MMputchar(unsigned char c) {
+    if (ConsoleRepeat) {
+        char b[2] = { 0 };
+        b[0] = c;
+        std::cout << b;
+    }
     DisplayPutC(c);
     if(isprint((unsigned char)c)) MMCharPos++;
     if(c == '\r') {
@@ -218,7 +227,7 @@ void EditInputLine(void) {
     int insert, startline, maxchars;
     int CharIndex, BufEdited;
     int c, i, j;
-    maxchars = Option.Width;
+    maxchars = OptionWidth;
     if((int)strlen((const char *)inpbuf) >= maxchars) {
         MMPrintString((char*)inpbuf);
         error((char *)"Line is too long to edit");
@@ -428,6 +437,7 @@ void EditInputLine(void) {
                    break;
             }
             for (i = 0; i < MAXKEYLEN + 1; i++) buf[i] = buf[i + 1];                             // shuffle down the buffer to get the next char
+            if ((int)strlen((char *)inpbuf) >= xres[VideoMode] / gui_font_width - 3) { beep(500, 650); }
         } while (*buf);
         if(CharIndex == strlen((const char*)inpbuf)) {
             insert = false;
@@ -480,6 +490,26 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     LoadOptions();
     HRes = Option.hres;
     VRes = Option.vres;
+    OptionHeight = Option.Height;
+    OptionWidth = Option.Width;
+    strcpy(lastfileedited, Option.lastfilename);
+    WDTimer = 0;
+    SecondsTimer = 0;
+    PauseTimer = 0;
+    IntPauseTimer = 0;
+    mSecTimer = 0;
+    AHRSTimer = 0;
+    MouseTimer = 0;
+    MouseProcTimer = 0;
+    ScrewUpTimer = 0;
+    TOUCH_DOWN = 0;
+    EchoOption = true;
+    PromptFont = 1;
+    PromptFC = M_WHITE, PromptBC = M_BLACK;                             // the font and colours selected at the prompt
+    memset(errstring,0,256);
+    memset(lastcmd, 0, sizeof(lastcmd));
+    memset(FrameBuffer, 0, FRAMEBUFFERSIZE);
+    errpos = 0;
     FullScreen = Option.fullscreen;
     memset(inpbuf, 0, STRINGSIZE);
     memset(tknbuf, 0, STRINGSIZE);
@@ -512,23 +542,36 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     QueryPerformanceCounter((LARGE_INTEGER*) &startfasttime);
     while (mSecTimer < 1000) {}
     while (!DisplayActive) {}
-    if (!(_excep_code == RESTART_NOAUTORUN || _excep_code == WATCHDOG_TIMEOUT)) {
+    if (!(_excep_code == RESTART_NOAUTORUN || _excep_code == WATCHDOG_TIMEOUT || _excep_code == SCREWUP_TIMEOUT)) {
         if (Option.Autorun == 0) {
             if (!(_excep_code == RESET_COMMAND))MMPrintString((char *)MES_SIGNON);                           // print sign on message
         }
+    }
+    if (_excep_code == WATCHDOG_TIMEOUT) {
+        WatchdogSet = true;                                 // remember if it was a watchdog timeout
+        MMPrintString((char*)"\rWatchdog timeout");
+    }
+    if (_excep_code == SCREWUP_TIMEOUT) {
+        MMPrintString((char*)"\rCommand timeout");
     }
     _excep_code = 0;
     SetCurrentDirectoryA(Option.defaultpath);
     if(setjmp(mark) != 0) {
         // we got here via a long jump which means an error or CTRL-C or the program wants to exit to the command prompt
         if (CurrentlyPlaying != P_NOTHING)CloseAudio();
+        optionangle = 1.0;
+        optiony = 0;
         ScrewUpTimer = 0;
         MMAbort = 0;
         clearrepeat();
         WritePage=0;
         ReadPage=0;
-        SetFont(Option.DefaultFont);
-        setmode(Option.mode, 0, Option.fullscreen);
+        if(VideoMode==Option.mode)SetFont(Option.DefaultFont);
+        else SetFont(defaultfont[VideoMode]);
+        PromptFC = M_WHITE; PromptBC = M_BLACK;                             // the font and colours selected at the prompt
+        gui_fcolour = PromptFC;
+        gui_bcolour = PromptBC;
+        //        setmode(Option.mode, 0, Option.fullscreen);
         CurrentX = 0;
         if (errpos) {
             CloseAllFiles();
@@ -540,11 +583,22 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     }
     else {
         if (lpParameter != NULL) {
-            FILE* fp;
             strcpy((char*)tknbuf, (char*)lpParameter);
             if (strchr((char*)tknbuf, '.') == NULL) strcat((char*)tknbuf, ".BAS");
-            if ((fp = fopen((const char*)tknbuf, "r")) != NULL) {
-                fclose(fp);
+            if (existsfile((char *)tknbuf)) {
+                strcpy((char*)inpbuf, "RUN \"");
+                strcat((char*)inpbuf, (char*)tknbuf);
+                strcat((char*)inpbuf, "\"");
+                memset(tknbuf, 0, STRINGSIZE);
+                tokenise(true);
+                ExecuteProgram(tknbuf);                                     // execute the line straight away
+                memset(inpbuf, 0, STRINGSIZE);
+            }
+        }
+        if (*lastfileedited && Option.Autorun) {
+            strcpy((char*)tknbuf, lastfileedited);
+            if (strchr((char*)tknbuf, '.') == NULL) strcat((char*)tknbuf, ".BAS");
+            if (existsfile((char*)tknbuf)) {
                 strcpy((char*)inpbuf, "RUN \"");
                 strcat((char*)inpbuf, (char*)tknbuf);
                 strcat((char*)inpbuf, "\"");
@@ -618,9 +672,14 @@ DWORD WINAPI mClock(LPVOID lpParameter)
         if (ScrewUpTimer) {
             if (--ScrewUpTimer == 0) {
                 _excep_code = SCREWUP_TIMEOUT;
-                SoftReset();                                            // crude way of implementing a watchdog timer.
             }
         }
+        if (WDTimer) {
+            if (--WDTimer == 0) {
+                _excep_code = WATCHDOG_TIMEOUT;
+            }
+        }
+
         if (MouseProcTimer % 20 == 0)MouseProc();
         if (InterruptUsed) {
             int i;

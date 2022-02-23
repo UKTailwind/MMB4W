@@ -57,6 +57,7 @@ const int64_t colourmap[16] = { M_BLACK,M_BLUE,M_GREEN,M_CYAN,M_RED,M_MAGENTA,M_
 const int xres[MAXMODES + 1] =         { 0,800,640,320,480,240,256,320,640,1024,848,1280,960,400,960,1280,1920,384,1024};
 const int yres[MAXMODES + 1] =         { 0,600,400,200,432,216,240,240,480,768,480,720,540,300,540,1024,1080,240,600};
 const int pixeldensity[MAXMODES + 1] = { 0,  1,  1,  3,  2,  4,  4,  3,  1,  1,  1,  1,  1,  2,  2,  1 ,   1,  3,  1};
+const int defaultfont[MAXMODES + 1] = { 0,1,1,1,1,1,1,1,1,(2 << 4) | 1 ,1 ,(2 << 4) | 1 , (3 << 4) | 1 ,1,1,(2 << 4) | 1 ,(2 << 4) | 1 ,1,(3 << 4) | 1 };
 typedef struct {
     unsigned char red;
     unsigned char green;
@@ -101,8 +102,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         if(FontTable[fnt >> 4] == NULL) error((char *)"Invalid font number #%", (fnt >> 4) + 1);
         gui_font_width = FontTable[fnt >> 4][0] * (fnt & 0b1111);
         gui_font_height = FontTable[fnt >> 4][1] * (fnt & 0b1111);
-        Option.Height = VRes / gui_font_height;
-        Option.Width = HRes / gui_font_width;
+        OptionHeight = VRes / gui_font_height;
+        OptionWidth = HRes / gui_font_width;
         gui_font = fnt;
     }
 
@@ -289,6 +290,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         uint32_t *WritePageAddress = PageTable[WritePage].address;
         int HRes = PageTable[WritePage].xmax;
         int VRes = PageTable[WritePage].ymax;
+        if (optiony)y1 = VRes - 1 - y1;
         if(x1 >= HRes || y1 >= VRes || x1 + width * scale < 0 || y1 + height * scale < 0)return;
         for (i = 0; i < height; i++) {                                   // step thru the font scan line by line
             for (j = 0; j < scale; j++) {                                // repeat lines to scale the font
@@ -316,6 +318,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         uint32_t* WritePageAddress = PageTable[WritePage].address;
         int HRes = PageTable[WritePage].xmax;
         int VRes = PageTable[WritePage].ymax;
+        if (optiony)y1 = VRes - 1 - y1;
+        if (optiony)y2 = VRes - 1 - y2;
         if(x1 < 0) x1 = 0;
         if(x1 >= HRes) x1 = HRes - 1;
         if(x2 < 0) x2 = 0;
@@ -366,6 +370,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         uint32_t* ReadPageAddress = PageTable[ReadPage].address;
         int HRes = PageTable[ReadPage].xmax;
         int VRes = PageTable[ReadPage].ymax;
+        if (optiony)y1 = VRes - 1 - y1;
+        if (optiony)y2 = VRes - 1 - y2;
         uint32_t *d=(uint32_t *)c;
         if (x2 <= x1) { t = x1; x1 = x2; x2 = t; }
         if (y2 <= y1) { t = y1; y1 = y2; y2 = t; }
@@ -390,8 +396,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         int maxW = PageTable[WritePage].xmax;
         int maxH = PageTable[WritePage].ymax;
         uint32_t wpa = (uint32_t)PageTable[WritePage].address;
-//******        if (optiony)y1 = maxH - 1 - y1;
-//******        if (optiony)y2 = maxH - 1 - y2;
+        if (optiony)y1 = maxH - 1 - y1;
+        if (optiony)y2 = maxH - 1 - y2;
         if (x2 <= x1) { t = x1; x1 = x2; x2 = t; }
         if (y2 <= y1) { t = y1; y1 = y2; y2 = t; }
         uint32_t* s, * pp = (uint32_t*)p;
@@ -419,8 +425,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         int maxW = PageTable[WritePage].xmax;
         int maxH = PageTable[WritePage].ymax;
         uint32_t wpa = (uint32_t)PageTable[WritePage].address;
-//******        if (optiony)y1 = maxH - 1 - y1;
-//        if (optiony)y2 = maxH - 1 - y2;
+        if (optiony)y1 = maxH - 1 - y1;
+        if (optiony)y2 = maxH - 1 - y2;
         // make sure the coordinates are kept within the display area
         if (x2 <= x1) { t = x1; x1 = x2; x2 = t; }
         if (y2 <= y1) { t = y1; y1 = y2; y2 = t; }
@@ -588,49 +594,92 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
      Any characters not in the font will print as a space.
     *****************************************************************************************/
     extern "C" void GUIPrintString(int x, int y, int fnt, int jh, int jv, int jo, int64_t fc, int64_t bc, unsigned char* str) {
+
         CurrentX = x;  CurrentY = y;
-        if(jo == ORIENT_NORMAL) {
-            if(jh == JUSTIFY_CENTER) CurrentX -= (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
-            if(jh == JUSTIFY_RIGHT)  CurrentX -= (strlen((const char *)str) * GetFontWidth(fnt));
-            if(jv == JUSTIFY_MIDDLE) CurrentY -= GetFontHeight(fnt) / 2;
-            if(jv == JUSTIFY_BOTTOM) CurrentY -= GetFontHeight(fnt);
-        }
-        else if(jo == ORIENT_VERT) {
-            if(jh == JUSTIFY_CENTER) CurrentX -= GetFontWidth(fnt) / 2;
-            if(jh == JUSTIFY_RIGHT)  CurrentX -= GetFontWidth(fnt);
-            if(jv == JUSTIFY_MIDDLE) CurrentY -= (strlen((const char *)str) * GetFontHeight(fnt)) / 2;
-            if(jv == JUSTIFY_BOTTOM) CurrentY -= (strlen((const char *)str) * GetFontHeight(fnt));
-        }
-        else if(jo == ORIENT_INVERTED) {
-            if(jh == JUSTIFY_CENTER) CurrentX += (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
-            if(jh == JUSTIFY_RIGHT)  CurrentX += (strlen((const char *)str) * GetFontWidth(fnt));
-            if(jv == JUSTIFY_MIDDLE) CurrentY += GetFontHeight(fnt) / 2;
-            if(jv == JUSTIFY_BOTTOM) CurrentY += GetFontHeight(fnt);
-        }
-        else if(jo == ORIENT_CCW90DEG) {
-            if(jh == JUSTIFY_CENTER) CurrentX -= GetFontHeight(fnt) / 2;
-            if(jh == JUSTIFY_RIGHT)  CurrentX -= GetFontHeight(fnt);
-            if(jv == JUSTIFY_MIDDLE) CurrentY += (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
-            if(jv == JUSTIFY_BOTTOM) CurrentY += (strlen((const char *)str) * GetFontWidth(fnt));
-        }
-        else if(jo == ORIENT_CW90DEG) {
-            if(jh == JUSTIFY_CENTER) CurrentX += GetFontHeight(fnt) / 2;
-            if(jh == JUSTIFY_RIGHT)  CurrentX += GetFontHeight(fnt);
-            if(jv == JUSTIFY_MIDDLE) CurrentY -= (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
-            if(jv == JUSTIFY_BOTTOM) CurrentY -= (strlen((const char *)str) * GetFontWidth(fnt));
-        }
-        while (*str) {
-            if(*str == 0xff) {
-                //            fc = rgb(0, 0, 255);                                // this is specially for GUI FORMATBOX
-                str++;
-                GUIPrintChar(fnt, bc, fc, *str++, jo);
+        char* newstr = NULL;
+        if (optiony) {
+            newstr = (char *)GetTempMemory(STRINGSIZE);
+            if (jo == ORIENT_VERT || jo == ORIENT_CCW90DEG || jo == ORIENT_CW90DEG) {
+                int i = strlen((const char *)str) - 1;
+                int j = 0;
+                while (i >= 0) {
+                    newstr[i] = str[j];
+                    i--;
+                    j++;
+                }
             }
-            else
-                GUIPrintChar(fnt, fc, bc, *str++, jo);
+            else strcpy(newstr, (const char*)str);
         }
+        if (jo == ORIENT_NORMAL && optiony == 0) {
+            if (jh == JUSTIFY_CENTER) CurrentX -= (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX -= (strlen((const char *)str) * GetFontWidth(fnt));
+            if (jv == JUSTIFY_MIDDLE) CurrentY -= GetFontHeight(fnt) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY -= GetFontHeight(fnt);
+        }
+        else if (jo == ORIENT_NORMAL && optiony) {
+            if (jh == JUSTIFY_CENTER) CurrentX -= (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX -= (strlen((const char *)str) * GetFontWidth(fnt));
+            if (jv == JUSTIFY_MIDDLE) CurrentY += GetFontHeight(fnt) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY += GetFontHeight(fnt);
+        }
+        else if (jo == ORIENT_VERT && optiony == 0) {
+            if (jh == JUSTIFY_CENTER) CurrentX -= GetFontWidth(fnt) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX -= GetFontWidth(fnt);
+            if (jv == JUSTIFY_MIDDLE) CurrentY -= (strlen((const char *)str) * GetFontHeight(fnt)) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY -= (strlen((const char *)str) * GetFontHeight(fnt));
+        }
+        else if (jo == ORIENT_VERT && optiony) {
+            CurrentY -= GetFontHeight(fnt) * (strlen((const char *)str) - 1);
+            if (jh == JUSTIFY_CENTER) CurrentX -= GetFontWidth(fnt) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX -= GetFontWidth(fnt);
+            if (jv == JUSTIFY_MIDDLE) CurrentY += (strlen((const char *)str) * GetFontHeight(fnt)) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY += (strlen((const char *)str) * GetFontHeight(fnt));
+        }
+        else if (jo == ORIENT_INVERTED && optiony == 0) {
+            if (jh == JUSTIFY_CENTER) CurrentX += (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX += (strlen((const char *)str) * GetFontWidth(fnt));
+            if (jv == JUSTIFY_MIDDLE) CurrentY += GetFontHeight(fnt) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY += GetFontHeight(fnt);
+        }
+        else if (jo == ORIENT_INVERTED && optiony) {
+            if (jh == JUSTIFY_CENTER) CurrentX += (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX += (strlen((const char *)str) * GetFontWidth(fnt));
+            if (jv == JUSTIFY_MIDDLE) CurrentY -= GetFontHeight(fnt) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY -= GetFontHeight(fnt);
+        }
+        else if (jo == ORIENT_CCW90DEG && optiony == 0) {
+            if (jh == JUSTIFY_CENTER) CurrentX -= GetFontHeight(fnt) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX -= GetFontHeight(fnt);
+            if (jv == JUSTIFY_MIDDLE) CurrentY += (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY += (strlen((const char *)str) * GetFontWidth(fnt));
+        }
+        else if (jo == ORIENT_CCW90DEG && optiony) {
+            CurrentY += GetFontWidth(fnt) * (strlen((const char *)str) + 1);
+            if (jh == JUSTIFY_CENTER) CurrentX -= GetFontHeight(fnt) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX -= GetFontHeight(fnt);
+            if (jv == JUSTIFY_MIDDLE) CurrentY -= (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY -= (strlen((const char *)str) * GetFontWidth(fnt));
+        }
+        else if (jo == ORIENT_CW90DEG && optiony == 0) {
+            if (jh == JUSTIFY_CENTER) CurrentX += GetFontHeight(fnt) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX += GetFontHeight(fnt);
+            if (jv == JUSTIFY_MIDDLE) CurrentY -= (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY -= (strlen((const char *)str) * GetFontWidth(fnt));
+        }
+        else if (jo == ORIENT_CW90DEG && optiony) {
+            CurrentY -= GetFontWidth(fnt) * (strlen((const char *)str) - 1);
+            if (jh == JUSTIFY_CENTER) CurrentX += GetFontHeight(fnt) / 2;
+            if (jh == JUSTIFY_RIGHT)  CurrentX += GetFontHeight(fnt);
+            if (jv == JUSTIFY_MIDDLE) CurrentY += (strlen((const char *)str) * GetFontWidth(fnt)) / 2;
+            if (jv == JUSTIFY_BOTTOM) CurrentY += (strlen((const char *)str) * GetFontWidth(fnt));
+        }
+        if (optiony) while (*newstr) GUIPrintChar(fnt, fc, bc, *newstr++, jo);
+        else while (*str) GUIPrintChar(fnt, fc, bc, *str++, jo);
     }
 
     extern "C" void DisplayPutC(unsigned char c) {
+        int maxH = PageTable[WritePage].ymax;
+        int maxW = PageTable[WritePage].xmax;
 
         // if it is printable and it is going to take us off the right hand end of the screen do a CRLF
         if(c >= FontTable[gui_font >> 4][2] && c < FontTable[gui_font >> 4][2] + FontTable[gui_font >> 4][3]) {
@@ -646,10 +695,15 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             return;
         case '\r':  CurrentX = 0;
             return;
-        case '\n':  CurrentY += gui_font_height;
-            if(CurrentY + gui_font_height >= VRes) {
-                ScrollLCD(CurrentY + gui_font_height - VRes);
-                CurrentY -= (CurrentY + gui_font_height - VRes);
+        case '\n':  CurrentY += (optiony ? -gui_font_height : gui_font_height);
+            if (optiony == 0 && (CurrentY + gui_font_height >= maxH )) {
+                    ScrollLCD(CurrentY + gui_font_height - maxH);
+                    CurrentY -= (CurrentY + gui_font_height - maxH);
+            }
+            else if (optiony == 1 && CurrentY < 0) {
+                ScrollLCD(gui_font_height);
+                CurrentY += gui_font_height;
+                DrawRectangle(0, 0, maxW - 1, gui_font_height, gui_bcolour); // erase the line to be scrolled off
             }
             return;
         case '\t':  do {
@@ -1641,8 +1695,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         VRes = yres[mode];
         FullScreen = fullscreen;
         PixelSize = pixeldensity[mode];
-        Option.Height = VRes / gui_font_height;
-        Option.Width = HRes / gui_font_width;
+        OptionHeight = VRes / gui_font_height;
+        OptionWidth = HRes / gui_font_width;
         for (int i = 0; i <= MAXPAGES; i++) {
             PageTable[i].address = getpageaddress(i);
             PageTable[i].xmax = HRes;
@@ -1919,6 +1973,10 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         if (r2 < r1)error((char *)"Inner radius < outer");
         arcrad1 = (int)getinteger(argv[8]);
         arcrad2 = (int)getinteger(argv[10]);
+        if (optiony) {
+            arcrad1 += 180;
+            arcrad2 += 180;
+        }
         while (arcrad1 < 0.0)arcrad1 += 360;
         while (arcrad2 < 0.0)arcrad2 += 360;
         if (arcrad1 == arcrad2)error((char *)"Radials");
@@ -2412,159 +2470,6 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         }
     }
 
-/*    void cmd_blit(void) {
-        int x1, y1, x2, y2, w, h, bnbr;
-        uint32_t * buff = NULL;
-        unsigned char* p;
-        if ((p = checkstring(cmdline, (unsigned char *)"LOAD"))) {
-           int fnbr;
-            int xOrigin, yOrigin, xlen, ylen;
-//******            BMPDECODER BmpDec;
-            // get the command line arguments
-            getargs(&p, 11, (unsigned char*)",");                                            // this MUST be the first executable line in the function
-            if (*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
-            bnbr = (int64_t)getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
-            if (argc == 0) error((char *)"Argument count");
-            p = getCstring(argv[2]);                                        // get the file name
-            xOrigin = yOrigin = 0;
-            if (argc >= 5 && *argv[4]) xOrigin = (int64_t)getinteger(argv[4]);                    // get the x origin (optional) argument
-            if (argc >= 7 && *argv[6]) yOrigin = (int64_t)getinteger(argv[6]);                    // get the y origin (optional) argument
-            if (xOrigin < 0 || yOrigin < 0)error((char *)"Coordinates");
-            xlen = ylen = -1;
-            if (argc >= 9 && *argv[8]) xlen = (int64_t)getinteger(argv[8]);                    // get the x length (optional) argument
-            if (argc == 11) ylen = (int64_t)getinteger(argv[10]);                    // get the y length (optional) argument
-            // open the file
-            if (strchr((char *)p, '.') == NULL) strcat((char *)p, ".BMP");
-            fnbr = FindFreeFileNbr();
-            if (!BasicFileOpen((char *)p, fnbr, (char*)"rb")) return;
-//******            BDEC_bReadHeader(&BmpDec, fnbr);
-            FileClose(fnbr);
-//******            if (xlen == -1)xlen = BmpDec.lWidth;
-//******            if (ylen == -1)ylen = BmpDec.lHeight;
-//******            if (xlen + xOrigin > BmpDec.lWidth || ylen + yOrigin > BmpDec.lHeight)error((char *)"Coordinates");
-            blitbuffptr[bnbr] = (uint32_t*)GetMemory((xlen * ylen + 2) * sizeof(uint32_t));
-            memset(blitbuffptr[bnbr], 0xFF, xlen * ylen * 3 + 4);
-            fnbr = FindFreeFileNbr();
-            if (!BasicFileOpen((char *)p, fnbr, (char*)"rb")) return;
-//******            BMP_bDecode_memory(xOrigin, yOrigin, xlen, ylen, fnbr, &blitbuffptr[bnbr][2]);
-            blitbuffptr[bnbr][0] = xlen;
-            blitbuffptr[bnbr][0] = ylen;
-            FileClose(fnbr);
-            return;
-        }
-        if ((p = checkstring(cmdline, (unsigned char*)"READ"))) {
-            getargs(&p, 9, (unsigned char*)",");
-            if (argc != 9) error((char *)"Syntax");
-            if (*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
-            bnbr = (int64_t)getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
-            x1 = (int64_t)getinteger(argv[2]);
-            y1 = (int64_t)getinteger(argv[4]);
-            w = (int64_t)getinteger(argv[6]);
-            h = (int64_t)getinteger(argv[8]);
-            if (w < 1 || h < 1) return;
-            x2 = 0; y2 = 0; //avoid compiler error;
-            if (x1 < 0) { x2 -= x1; w += x1; x1 = 0; }
-            if (y1 < 0) { y2 -= y1; h += y1; y1 = 0; }
-            if (x1 + w > HRes) w = HRes - x1;
-            if (y1 + h > VRes) h = VRes - y1;
-            if (w < 1 || h < 1 || x1 < 0 || x1 + w > HRes || y1 < 0 || y1 + h > VRes) return;
-            if (blitbuffptr[bnbr] == NULL) {
-                blitbuffptr[bnbr] = (uint32_t *)GetMemory((w * h + 2) * sizeof(uint32_t));
-                ReadBuffer(x1, y1, x1 + w - 1, y1 + h - 1, &blitbuffptr[bnbr][2]);
-                blitbuffptr[bnbr][0]=w;
-                blitbuffptr[bnbr][1]=h;
-            }
-            else error((char *)"Buffer in use");
-        }
-        else if ((p = checkstring(cmdline, (unsigned char*)"WRITE"))) {
-            getargs(&p, 9, (unsigned char*)",");
-            if (!(argc == 9 || argc == 5)) error((char *)"Syntax");
-            if (*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
-            bnbr = (int64_t)getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
-            x1 = (int64_t)getinteger(argv[2]);
-            y1 = (int64_t)getinteger(argv[4]);
-            w = blitbuffptr[bnbr][0];
-            h = blitbuffptr[bnbr][1];
-            if (argc >= 7 && *argv[6])w = (int64_t)getinteger(argv[6]);
-            if (argc >= 9 && *argv[8])h = (int64_t)getinteger(argv[8]);
-            if (w < 1 || h < 1) return;
-            x2 = 0; y2 = 0; //avoid compiler error;
-            if (x1 < 0) { x2 -= x1; w += x1; x1 = 0; }
-            if (y1 < 0) { y2 -= y1; h += y1; y1 = 0; }
-            if (x1 + w > HRes) w = HRes - x1;
-            if (y1 + h > VRes) h = VRes - y1;
-            if (w < 1 || h < 1 || x1 < 0 || x1 + w > HRes || y1 < 0 || y1 + h > VRes) return;
-            if (blitbuffptr[bnbr] != NULL) {
-                DrawBuffer(x1, y1, x1 + w - 1, y1 + h - 1, &blitbuffptr[bnbr][2]);
-            }
-            else error((char *)"Buffer not in use");
-        }
-        else if ((p = checkstring(cmdline, (unsigned char*)"CLOSE"))) {
-            getargs(&p, 1, (unsigned char*)",");
-            if (*argv[0] == '#') argv[0]++;                              // check if the first arg is prefixed with a #
-            bnbr = (int64_t)getint(argv[0], 1, MAXBLITBUF) - 1;                  // get the buffer number
-            if (blitbuffptr[bnbr] != NULL) {
-                FreeMemory((unsigned char*)blitbuffptr[bnbr]);
-                blitbuffptr[bnbr] = NULL;
-            }
-            else error((char *)"Buffer not in use");
-            // get the number
-        }
-        else {
-            int max_x;
-            getargs(&cmdline, 11, (unsigned char *)",");
-            if (argc != 11) error((char *)"Syntax");
-            x1 = (int64_t)getinteger(argv[0]);
-            y1 = (int64_t)getinteger(argv[2]);
-            x2 = (int64_t)getinteger(argv[4]);
-            y2 = (int64_t)getinteger(argv[6]);
-            w = (int64_t)getinteger(argv[8]);
-            h = (int64_t)getinteger(argv[10]);
-            if (w < 1 || h < 1) return;
-            if (x1 < 0) { x2 -= x1; w += x1; x1 = 0; }
-            if (x2 < 0) { x1 -= x2; w += x2; x2 = 0; }
-            if (y1 < 0) { y2 -= y1; h += y1; y1 = 0; }
-            if (y2 < 0) { y1 -= y2; h += y2; y2 = 0; }
-            if (x1 + w > HRes) w = HRes - x1;
-            if (x2 + w > HRes) w = HRes - x2;
-            if (y1 + h > VRes) h = VRes - y1;
-            if (y2 + h > VRes) h = VRes - y2;
-            if (w < 1 || h < 1 || x1 < 0 || x1 + w > HRes || x2 < 0 || x2 + w > HRes || y1 < 0 || y1 + h > VRes || y2 < 0 || y2 + h > VRes) return;
-            if (x1 >= x2) {
-                max_x = 1;
-                buff = ( uint32_t *)GetMemory(max_x * h * sizeof(uint32_t));
-                while (w > max_x) {
-                    ReadBuffer(x1, y1, x1 + max_x - 1, y1 + h - 1, buff);
-                    DrawBuffer(x2, y2, x2 + max_x - 1, y2 + h - 1, buff);
-                    x1 += max_x;
-                    x2 += max_x;
-                    w -= max_x;
-                }
-                ReadBuffer(x1, y1, x1 + w - 1, y1 + h - 1, buff);
-                DrawBuffer(x2, y2, x2 + w - 1, y2 + h - 1, buff);
-                FreeMemory((unsigned char *)buff);
-                return;
-            }
-            if (x1 < x2) {
-                int start_x1, start_x2;
-                max_x = 1;
-                buff = (uint32_t*)GetMemory(max_x * h * sizeof(uint32_t));
-                start_x1 = x1 + w - max_x;
-                start_x2 = x2 + w - max_x;
-                while (w > max_x) {
-                    ReadBuffer(start_x1, y1, start_x1 + max_x - 1, y1 + h - 1, buff);
-                    DrawBuffer(start_x2, y2, start_x2 + max_x - 1, y2 + h - 1, buff);
-                    w -= max_x;
-                    start_x1 -= max_x;
-                    start_x2 -= max_x;
-                }
-                ReadBuffer(x1, y1, x1 + w - 1, y1 + h - 1, buff);
-                DrawBuffer(x2, y2, x2 + w - 1, y2 + h - 1, buff);
-                FreeMemory((unsigned char*)buff);
-                return;
-            }
-        }
-    }*/
     // get and decode the justify$ string used in TEXT and GUI CAPTION
 // the values are returned via pointers
     extern "C" int GetJustification(char* p, int* jh, int* jv, int* jo) {
@@ -2823,8 +2728,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         uint32_t rpa = (uint32_t)PageTable[ReadPage].address;
         uint32_t hrw = (uint32_t)PageTable[WritePage].xmax;
         uint32_t hrr = (uint32_t)PageTable[ReadPage].xmax;
-// ******       if (optiony)y1 = PageTable[ReadPage].ymax - y1 - h;
-//        if (optiony)y2 = PageTable[WritePage].ymax - y2 - h;
+       if (optiony)y1 = PageTable[ReadPage].ymax - y1 - h;
+        if (optiony)y2 = PageTable[WritePage].ymax - y2 - h;
         int yp;
         //Check if we need to process overlapping areas
         if (ReadPage == WritePage && !(x1 + w <= x2 || x1 >= x2 + w || y1 + h <= y2 || y1 >= y2 + h)) {
@@ -3122,7 +3027,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         uint32_t hrr = (uint32_t)PageTable[WPN].xmax;
         int maxW = PageTable[WritePage].xmax;
         int maxH = PageTable[WritePage].ymax;
-//******        if (optiony)y = PageTable[WPN].ymax - 1 - y;
+        if (optiony)y = PageTable[WPN].ymax - 1 - y;
         int yp;
         uint8_t* s = (uint8_t*)((y * hrr + x) * 4 + rpa); //pointer to the start of the source data
         uint8_t* d = (uint8_t*)wpa;//pointer to the start of the destination data
@@ -3447,7 +3352,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                             if (dontcopyblack == 0 || c & 0xFFFFFF) {
                                 yy = y + ny;
                                 xx = x + nx;
-//******                                if (optiony)yy = maxH - 1 - yy;
+                                if (optiony)yy = maxH - 1 - yy;
                                 if (xx < maxW && yy < maxH && xx >= 0 && yy >= 0) {
                                     *(uint32_t*)((yy * maxW + xx) * 4 + wpa) = (uint32_t)c;
                                 }
@@ -3554,7 +3459,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                         if (dontcopyblack == 0 || c & 0xFFFFFF) {
                             yp = yy + ys;
                             xp = xx + nx;
-//******                            if (optiony)yy = maxH - 1 - yy;
+                            if (optiony)yy = maxH - 1 - yy;
                             if (xp < maxW && yp < maxH && xp >= 0 && yp >= 0) {
                                 *(uint32_t*)((yp * maxW + xp) * 4 + wpa) = (uint32_t)c;
                             }
@@ -3627,7 +3532,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                         if (dontcopyblack == 0 || c & 0xFFFFFF) {
                             yp = yy + ny;
                             xp = xx + xs;
-//******                            if (optiony)yy = maxH - 1 - yy;
+                            if (optiony)yy = maxH - 1 - yy;
                             if (xp < maxW && yp < maxH && xp >= 0 && yp >= 0) {
                                 *(uint32_t*)((yp * maxW + xp) * 4 + wpa) = (uint32_t)c;
                             }
@@ -3907,9 +3812,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                     ct = z1 - camera[struct3d[n]->camera].z;
                     t = -(/*A * x1 + B * y1*/ +C * z1 + D) / (/*A * at + B * bt + */C * ct);
                     xcoord[v] = (short)(x1 + round(at * t) + (maxW >> 1) - camera[struct3d[n]->camera].x - camera[struct3d[n]->camera].panx);
-//******                    if (optiony)ycoord[v] = round3d(y1 + bt * t);
-//******                    else 
-                    ycoord[v] = (short)(maxH - round(y1 + bt * t) - 1);
+                    if (optiony)ycoord[v] = (short)round(y1 + bt * t);
+                    else ycoord[v] = (short)(maxH - round(y1 + bt * t) - 1);
                     ycoord[v] -= (short)((maxH >> 1) - camera[struct3d[n]->camera].y - camera[struct3d[n]->camera].pany);
                     if (clear) {
                         if (xcoord[v] > struct3d[n]->xmax)struct3d[n]->xmax = xcoord[v];

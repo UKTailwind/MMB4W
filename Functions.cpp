@@ -402,7 +402,7 @@ void fun_asc(void) {
 
 // return the arctangent of a number in radians
 void fun_atn(void) {
-    fret = atan(getnumber(ep));
+    fret = atan(getnumber(ep)) * optionangle;
     targ = T_NBR;
 }
 
@@ -413,7 +413,7 @@ void fun_atan2(void) {
     y = getnumber(argv[0]);
     x = getnumber(argv[2]);
     z = atan2(y, x);
-    fret = z;
+    fret = z * optionangle;
     targ = T_NBR;
 }
 
@@ -441,7 +441,7 @@ void fun_cint(void) {
 
 // return the cosine of a number in radians
 void fun_cos(void) {
-    fret = cos(getnumber(ep));
+    fret = cos(getnumber(ep) / optionangle);
     targ = T_NBR;
 }
 
@@ -695,7 +695,7 @@ void fun_sgn(void) {
 // Return the sine of the argument 'number' in radians.
 // n = SIN( number )
 void fun_sin(void) {
-    fret = sin(getnumber(ep));
+    fret = sin(getnumber(ep) / optionangle);
     targ = T_NBR;
 }
 
@@ -716,7 +716,7 @@ void fun_sqr(void) {
 // Return the tangent of the argument 'number' in radians.
 // n = TAN( number )
 void fun_tan(void) {
-    fret = tan(getnumber(ep));
+    fret = tan(getnumber(ep) / optionangle);
     targ = T_NBR;
 }
 
@@ -996,6 +996,7 @@ void fun_asin(void) {
     else {
         fret = arcsinus(f);
     }
+    fret *= optionangle;
     targ = T_NBR;
 }
 
@@ -1014,6 +1015,7 @@ void fun_acos(void) {
     else {
         fret = PI_VALUE / 2 - arcsinus(f);
     }
+    fret *= optionangle;
     targ = T_NBR;
 }
 
@@ -1097,3 +1099,29 @@ extern "C" void  * DoExpression(unsigned char* p, int* t) {
     error((char *)"Internal fault (sorry)");
     return NULL;                                                    // to keep the compiler happy
 }
+// function (which looks like a pre defined variable) to return MM.CMDLINE$
+// it uses the command line for a shortcut RUN (the + symbol) which was stored in tknbuf[]
+void fun_cmdline(void) {
+    char* q, * p = runcmd;
+    sret = (unsigned char *)GetTempMemory(STRINGSIZE);									// this buffer is automatically zeroed so the string is zero size
+    skipspace(p);
+    if (*p == 34) {
+        do {
+            p++;
+        } while (*p != 34);
+        p++;
+        skipspace(p);
+        if (*p == ',') {
+            p++;
+            skipspace(p);
+        }
+    }
+    if ((q = strchr(p, '|'))) {
+        q--;
+        *q = 0;
+    }
+    strcpy((char *)sret, p);                                   // copy the string
+    CtoM(sret);
+    targ = T_STR;
+}
+

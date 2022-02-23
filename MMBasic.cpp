@@ -90,7 +90,7 @@ unsigned char DefaultType;                                                   // 
 int emptyarray = 0;
 int TempStringClearStart;                                           // used to prevent clearing of space in an expression that called a FUNCTION
 int NextData;                                                       // used to track the next item to read in DATA & READ stmts
-unsigned char* NextDataLine;                                                 // used to track the next line to read in DATA & READ stmts
+unsigned char* NextDataLine = ProgMemory;                                                 // used to track the next line to read in DATA & READ stmts
 int OptionBase;                                                     // track the state of OPTION BASE
 int strncasecmp(const char* s1, const char* s2, size_t n);
 int ProgramChanged;                                                 // true if the program in memory has been changed and not saved
@@ -430,89 +430,7 @@ extern "C" void MMPrintString(char* s) {
 //  % = insert a number
 // the optional data to be inserted is the second argument to this function
 // this uses longjump to skip back to the command input and cleanup the stack
-/*extern "C" void error(char* msg, ...) {
-    char* p, * tp, tstr[STRINGSIZE * 2];
-    va_list ap;
 
-    // first build the error message in the global string MMErrMsg
-    if (MMerrno == 0) MMerrno = 16;                                  // indicate an error
-    memset(tstr, 0, STRINGSIZE * 2);                                 // clear any previous string
-    if (*msg) {
-        va_start(ap, msg);
-        while (*msg) {
-            tp = &tstr[strlen(tstr)];                               // point to the end of the string
-            if (*msg == '$')                                         // insert a string
-                strcpy(tp, va_arg(ap, char*));
-            else if (*msg == '@')                                    // insert a character
-                *tp = (va_arg(ap, int));
-            else if (*msg == '%')                                    // insert an integer
-                IntToStr(tp, va_arg(ap, int), 10);
-            else
-                *tp = *msg;
-            msg++;
-        }
-    }
-
-    // copy the error message into the global MMErrMsg truncating at any tokens or if the string is too long
-    for (p = MMErrMsg, tp = tstr; *tp < 127 && (tp - tstr) < MAXERRMSG - 1; ) *p++ = *tp++;
-    *p = 0;
-
-    if (OptionErrorSkip) longjmp(ErrNext, 1);                       // if OPTION ERROR SKIP/IGNORE is in force
-
-//******    LoadOptions();                                                  // make sure that the option struct is in a clean state
-
-    SetFont(PromptFont);
-    gui_fcolour = PromptFC;
-    gui_bcolour = PromptBC;
-    if (CurrentX != 0) MMPrintString((char *)"\r\n");                   // error message should be on a new line
-    if (MMCharPos > 1) MMPrintString((char*)"\r\n");
-    if (CurrentLinePtr) {
-        tp = p = (char *)ProgMemory;
-        if (*CurrentLinePtr != T_NEWLINE && CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) {
-            // normally CurrentLinePtr points to a T_NEWLINE token but in this case it does not
-            // so we have to search for the start of the line and set CurrentLinePtr to that
-            while (*p != 0xff) {
-                while (*p) p++;                                        // look for the zero marking the start of an element
-                if (p >= (char*)CurrentLinePtr || p[1] == 0) {                // the previous line was the one that we wanted
-                    CurrentLinePtr = (unsigned char *)tp;
-                    break;
-                }
-                if (p[1] == T_NEWLINE) {
-                    tp = ++p;                                         // save because it might be the line we want
-                }
-                p++;                                                // step over the zero marking the start of the element
-                skipspace(p);
-                if (p[0] == T_LABEL) p += p[1] + 2;					// skip over the label
-            }
-        }
-
-        // we now have CurrentLinePtr pointing to the start of the line
- //        dump(CurrentLinePtr, 80);
-        llist(tknbuf, CurrentLinePtr);
-        p = (char*)tknbuf; skipspace(p);
-        MMPrintString((char*)(MMCharPos > 1 ? "\r\n[" : "["));
-        if (CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) {
-            IntToStr((char*)inpbuf, CountLines(CurrentLinePtr), 10);
-            IntToStr((char*)inpbuf, CountLines(CurrentLinePtr), 10);
-            MMPrintString((char*)inpbuf);
-            StartEditPoint = CurrentLinePtr;
-            StartEditChar = 0;
-        }
-        else
-            MMPrintString((char*)"LIBRARY");
-        MMPrintString((char*)"] ");
-        MMPrintString(p);
-        MMPrintString((char*)"\r\n");
-    }
-    MMPrintString((char*)"Error");
-    if (*MMErrMsg) {
-        MMPrintString((char*)" : ");
-        MMPrintString(MMErrMsg);
-    }
-    MMPrintString((char*)"\r\n");
-    memset(inpbuf, 0, STRINGSIZE);
-    longjmp(mark, 1);
-}*/
 void MMErrorString(char* msg) {
     char* c = &errstring[errpos];
     char* q = msg;
@@ -2649,15 +2567,15 @@ extern "C" void ExecuteProgram(unsigned char* p) {
             skipspace(cmdline);
             skipelement(nextstmt);
             if (*p && *p != '\'') {                                  // ignore a comment line
-                if (setjmp(ErrNext) == 0) {                          // return to the else leg of this if error and OPTION ERROR SKIP/IGNORE is in effect
+                if (OptionErrorSkip == 0) {
                     SaveLocalIndex = LocalIndex;                    // save this if we need to cleanup after an error
-                    if (*(unsigned char*)p >= C_BASETOKEN && *(unsigned char*)p - C_BASETOKEN < CommandTableSize - 1 && (commandtbl[*(unsigned char*)p - C_BASETOKEN].type & T_CMD)) {
-                        cmdtoken = *(unsigned char*)p;
+                    if (*p >= C_BASETOKEN && *p - C_BASETOKEN < CommandTableSize - 1 && (commandtbl[*p - C_BASETOKEN].type & T_CMD)) {
+                        cmdtoken = *p;
                         targ = T_CMD;
-                        commandtbl[*(unsigned char*)p - C_BASETOKEN].fptr(); // execute the command
+                        commandtbl[*p - C_BASETOKEN].fptr(); // execute the command
                     }
                     else {
-                        if (!isnamestart(*p)) error((char*)"Invalid character: @", (int)(*p));
+                        if (!isnamestart(*p)) error((char *)"Invalid character: @", (int)(*p));
                         i = FindSubFun(p, false);                   // it could be a defined command
                         if (i >= 0) {                                // >= 0 means it is a user defined command
                             DefinedSubFun(false, p, i, NULL, NULL, NULL, NULL);
@@ -2667,13 +2585,32 @@ extern "C" void ExecuteProgram(unsigned char* p) {
                     }
                 }
                 else {
-                    LocalIndex = SaveLocalIndex;                    // restore so that we can clean up any memory leaks
-                    ClearTempMemory();
+                    if (setjmp(ErrNext) == 0) {                          // return to the else leg of this if error and OPTION ERROR SKIP/IGNORE is in effect
+                        SaveLocalIndex = LocalIndex;                    // save this if we need to cleanup after an error
+                        if (*p >= C_BASETOKEN && *p - C_BASETOKEN < CommandTableSize - 1 && (commandtbl[*p - C_BASETOKEN].type & T_CMD)) {
+                            cmdtoken = *p;
+                            targ = T_CMD;
+                            commandtbl[*p - C_BASETOKEN].fptr(); // execute the command
+                        }
+                        else {
+                            if (!isnamestart(*p)) error((char*)"Invalid character: @", (int)(*p));
+                            i = FindSubFun(p, false);                   // it could be a defined command
+                            if (i >= 0) {                                // >= 0 means it is a user defined command
+                                DefinedSubFun(false, p, i, NULL, NULL, NULL, NULL);
+                            }
+                            else
+                                error((char*)"Unknown command");
+                        }
+                    }
+                    else {
+                        LocalIndex = SaveLocalIndex;                    // restore so that we can clean up any memory leaks
+                        ClearTempMemory();
+                    }
+                    if (OptionErrorSkip > 0) OptionErrorSkip--;          // if OPTION ERROR SKIP decrement the count - we do not error if it is greater than zero
                 }
-                if (OptionErrorSkip > 0) OptionErrorSkip--;        // if OPTION ERROR SKIP decrement the count - we do not error if it is greater than zero
                 if (TempMemoryIsChanged) ClearTempMemory();          // at the end of each command we need to clear any temporary string vars
                 CheckAbort();
-                check_interrupt();                                  // check for an MMBasic interrupt or touch event and handle it
+                check_interrupt();                                  // check for an MMBasic interrupt and handle it
             }
             p = nextstmt;
         }
@@ -2683,6 +2620,9 @@ extern "C" void ExecuteProgram(unsigned char* p) {
 void  ClearStack(void) {
     NextData = 0;
     NextDataLine = ProgMemory;
+    SaveNextDataLine = ProgMemory;
+    SaveNextData = 0;
+
     forindex = 0;
     doindex = 0;
     gosubindex = 0;
@@ -2693,6 +2633,9 @@ void  ClearStack(void) {
 
 extern "C" void ClearRuntime(void) {
     int i;
+    optionangle = 1.0;
+    optiony = 0;
+    ConsoleRepeat = 0;
     clearrepeat();
     ClearStack();
     OptionExplicit = false;

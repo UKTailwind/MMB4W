@@ -1061,12 +1061,13 @@ drmp3_bool32 onSeek(void* userdata, int offset, drmp3_seek_origin origin) {
     return 1;
 }
 void wavcallback(char* p) {
-    if (strchr(p, '.') == NULL) strcat(p, ".WAV");
+	char filename[STRINGSIZE] = { 0 };
+	fullfilename(p, filename, ".WAV");
     if (CurrentlyPlaying == P_WAV) {
         CloseAudio();
     }
     WAV_fnbr = FindFreeFileNbr();
-    if (!BasicFileOpen(p, WAV_fnbr, (char*)"rb")) return;
+    if (!BasicFileOpen(filename, WAV_fnbr, (char*)"rb")) return;
     drwav_allocation_callbacks allocationCallbacks;
     int myData;
     allocationCallbacks.pUserData = &myData;
@@ -1104,12 +1105,13 @@ void mp3callback(char* p) {
     allocationCallbacks.onMalloc = my_malloc;
     allocationCallbacks.onRealloc = my_realloc;
     allocationCallbacks.onFree = my_free;
-    if (CurrentlyPlaying == P_MP3) {
+	char filename[STRINGSIZE] = { 0 };
+	fullfilename(p, filename, ".MP3");
+	if (CurrentlyPlaying == P_MP3) {
         CloseAudio();
     }
-    if (strchr(p, '.') == NULL) strcat(p, ".mp3");
     WAV_fnbr = FindFreeFileNbr();
-    if (!BasicFileOpen(p, WAV_fnbr, (char *)"rb")) return;
+    if (!BasicFileOpen(filename, WAV_fnbr, (char *)"rb")) return;
     if (drmp3_init(&mymp3, (drmp3_read_proc)onRead, (drmp3_seek_proc)onSeek, NULL, &allocationCallbacks) == DRMP3_FALSE)error((char *)"Mp3 init");
     FreeMemorySafe((void**)&sbuff1);
     FreeMemorySafe((void**)&sbuff2);
@@ -1136,12 +1138,13 @@ void mp3callback(char* p) {
 }
 void flaccallback(char* p) {
     // open the file
-    if (CurrentlyPlaying == P_FLAC) {
+	char filename[STRINGSIZE] = { 0 };
+	fullfilename(p, filename, ".FLAC");
+	if (CurrentlyPlaying == P_FLAC) {
         CloseAudio();
     }
-    if (strchr(p, '.') == NULL) strcat(p, ".FLAC");
     WAV_fnbr = FindFreeFileNbr();
-    if (!BasicFileOpen(p, WAV_fnbr, (char *)"rb")) return;
+    if (!BasicFileOpen(filename, WAV_fnbr, (char *)"rb")) return;
     //	int myData;
     drflac_allocation_callbacks allocationCallbacks;
     allocationCallbacks.pUserData = &myData;
@@ -1182,7 +1185,22 @@ void flaccallback(char* p) {
 	}
 
 }
-
+extern "C" void beep(int duration, float freq) {
+	if (!(CurrentlyPlaying == P_NOTHING))CloseAudio();
+	SoundPlay = PWM_FREQ * duration / 1000;
+	PhaseM_left = freq / (float)PWM_FREQ * 4096.0f;
+	PhaseM_right = freq / (float)PWM_FREQ * 4096.0f;
+	WAV_fnbr = 0;
+	vol_left = 100;
+	vol_right = 100;
+	if (SampleRate != 44100 || NChannels != 2) {
+		SampleRate = 44100;
+		NChannels = 2;
+		SystemMode = MODE_SAMPLERATE;
+		while (SystemMode != MODE_RUN) {}
+	}
+	CurrentlyPlaying = P_TONE;
+}
 void cmd_play(void) {
     unsigned char* tp;
     if (checkstring(cmdline, (unsigned char *)"STOP")) {
@@ -1264,21 +1282,22 @@ void cmd_play(void) {
     }
     if ((tp = checkstring(cmdline, (unsigned char*)"MODFILE"))) {
         getargs(&tp, 3, (unsigned char*)",");                                  // this MUST be the first executable line in the function
-        char* p, * r;
+		char filename[STRINGSIZE] = { 0 };
+		char* p, * r;
         int i = 0, size;
         modfilesamplerate = 44100;
         if (CurrentlyPlaying != P_NOTHING) error((char *)"Sound output in use");
         sbuff1 = (char *)GetMemory(WAV_BUFFER_SIZE);
         sbuff2 = (char *)GetMemory(WAV_BUFFER_SIZE);
         p = (char *)getCstring(argv[0]);                                    // get the file name
-        WAVInterrupt = NULL;
+		fullfilename(p, filename, ".MOD");
+		WAVInterrupt = NULL;
         WAVcomplete = 0;
         // open the file
 		if (argc == 3)modfilesamplerate = (int)getinteger(argv[2]);
 		if (!(modfilesamplerate == 8000 || modfilesamplerate == 16000 || modfilesamplerate == 22050 || modfilesamplerate == 44100 || modfilesamplerate == 48000))error((char *)"Valid rates are 8000, 16000, 22050, 44100, 48000");
-		if (strchr(p, '.') == NULL) strcat(p, ".MOD");
         WAV_fnbr = FindFreeFileNbr();
-        if (!BasicFileOpen(p, WAV_fnbr, (char *)"rb")) return;
+        if (!BasicFileOpen(filename, WAV_fnbr, (char *)"rb")) return;
         i = 0;
         fseek(FileTable[WAV_fnbr].fptr, 0L, SEEK_END);
         size = ftell(FileTable[WAV_fnbr].fptr);
@@ -1400,7 +1419,8 @@ void cmd_play(void) {
         return;
     }
 	if ((tp = checkstring(cmdline, (unsigned char *)"EFFECT"))) {
-		unsigned char* p;
+		char filename[STRINGSIZE] = { 0 };
+		char* p;
 		int i = 0;
 		//        int playing=0;
 		getargs(&tp, 3, (unsigned char*)",");                                  // this MUST be the first executable line in the function
@@ -1408,7 +1428,8 @@ void cmd_play(void) {
 
 		if (!(CurrentlyPlaying == P_MOD)) error((char *)"Effects play over MOD file");
 
-		p = getCstring(argv[0]);                                    // get the file name
+		p = (char *)getCstring(argv[0]);                                    // get the file name
+		fullfilename(p, filename, ".WAV");
 		WAVInterrupt = NULL;
 
 		WAVcomplete = 0;
@@ -1423,9 +1444,8 @@ void cmd_play(void) {
 		   //        	drwav_close(mywav);
 		}
 
-		if (strchr((char*)p, '.') == NULL) strcat((char*)p, ".WAV");
 		WAV_fnbr = FindFreeFileNbr();
-		if (!BasicFileOpen((char*)p, WAV_fnbr, (char*)"rb")) return;
+		if (!BasicFileOpen(filename, WAV_fnbr, (char*)"rb")) return;
 		drwav_allocation_callbacks allocationCallbacks;
 		//    	int myData;
 		allocationCallbacks.pUserData = &myData;

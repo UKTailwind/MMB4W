@@ -996,9 +996,9 @@ void cmd_math(void) {
 			MMFLOAT* q = NULL;
 			getargs(&tp, 7, (unsigned char *)",");
 			if (!(argc == 7)) error((char *)"Argument count");
-			MMFLOAT yaw = -getnumber(argv[0]);
-			MMFLOAT pitch = getnumber(argv[2]);
-			MMFLOAT roll = getnumber(argv[4]);
+			MMFLOAT yaw = -getnumber(argv[0]) / optionangle;
+			MMFLOAT pitch = getnumber(argv[2]) / optionangle;
+			MMFLOAT roll = getnumber(argv[4]) / optionangle;
 			ptr1 = findvar(argv[6], V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
 			if (vartbl[VarIndex].type & T_NBR) {
 				if (vartbl[VarIndex].dims[1] != 0) error((char *)"Invalid variable");
@@ -1049,7 +1049,7 @@ void cmd_math(void) {
 				if ((uint32_t)ptr1 != (uint32_t)vartbl[VarIndex].val.s)error((char *)"Syntax");
 			}
 			else error((char *)"Argument 1 must be a 5 element floating point array");
-			MMFLOAT sineterm = sin(theta / 2.0);
+			MMFLOAT sineterm = sin(theta / 2.0 / optionangle);
 			q[0] = cos(theta / 2.0);
 			q[1] = x * sineterm;
 			q[2] = y * sineterm;
@@ -1432,7 +1432,7 @@ void fun_math(void) {
 			x = getnumber(argv[2]);
 			z = atan2(y, x);
 			if (z < 0.0) z = z + 2.0 * PI_VALUE;
-			fret = z;
+			fret = z * optionangle;
 			targ = T_NBR;
 			return;
 		}

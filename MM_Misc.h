@@ -67,6 +67,7 @@ void fun_format(void);
 void cmd_font(void);
 void fun_mouse(void);
 void cmd_mouse(void);
+void cmd_restart(void);
 #endif
 
 
@@ -76,9 +77,9 @@ void cmd_mouse(void);
 #ifdef INCLUDE_COMMAND_TABLE
 
 { (unsigned char*)"AutoSave", T_CMD, 0, cmd_autosave	},
-/* 
+ 
 { (unsigned char*)"WatchDog",		T_CMD,				0, cmd_watchdog },
-{ (unsigned char*)"Interrupt", 		T_CMD,              0, cmd_csubinterrupt },
+/*{ (unsigned char*)"Interrupt", 		T_CMD,              0, cmd_csubinterrupt },
 */
 { (unsigned char*)"DefineFont",     T_CMD,				0, cmd_cfunction },
 { (unsigned char*)"End DefineFont", T_CMD,				0, cmd_null },
@@ -93,6 +94,7 @@ void cmd_mouse(void);
 { (unsigned char*)"SetTick",		T_CMD,				0, cmd_settick },
 { (unsigned char*)"Mouse",			T_CMD,				0, cmd_mouse },
 { (unsigned char*)"Poke",			T_CMD,				0, cmd_poke },
+{ (unsigned char*)"Restart",        T_CMD,				0, cmd_restart },
 #endif
 
 
@@ -148,4 +150,9 @@ extern unsigned char* MouseInterrupRightDown;
 extern volatile int MouseFoundRightDown, MouseRightDown;
 extern volatile int MouseDouble;
 extern int VideoMode;
+extern int ConsoleRepeat;
+extern MMFLOAT optionangle;
+extern int optiony;
+
+
 #endif

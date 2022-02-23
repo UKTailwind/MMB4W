@@ -35,6 +35,9 @@ char *MMErrMsg=NULL;                                           // the error mess
 unsigned char* KeyInterrupt = NULL;
 volatile int Keycomplete = 0;
 int keyselect = 0;
+char runcmd[STRINGSIZE] = { 0 };
+unsigned char* SaveNextDataLine = ProgMemory;
+int SaveNextData = 0;
 
 
 // stack to keep track of nested FOR/NEXT loops
@@ -426,7 +429,7 @@ void ListFile(char* pp, int all) {
 			MMgetline(fnbr, (char*)buff);									    // get the input line
 			for (i = 0; i < strlen(buff); i++)if(buff[i] == TAB) buff[i] = ' ';
 			MMPrintString(buff);
-			ListCnt += strlen(buff) / Option.Width;
+			ListCnt += strlen(buff) / OptionWidth;
 			ListNewLine(&ListCnt, all);
 		}
 		FileClose(fnbr);
@@ -569,7 +572,7 @@ void cmd_list(void) {
 		ListProgram((unsigned char *)buff, false);
 	}
 	else if ((p = checkstring(cmdline, (unsigned char*)"COMMANDS"))) {
-		step = Option.Width/18;
+		step = OptionWidth/18;
 		m = 0;
 		char** c = (char **)GetTempMemory((CommandTableSize + 5) * sizeof(*c) + (CommandTableSize + 5) * 18);
 		for (i = 0; i < CommandTableSize + 5; i++) {
@@ -596,7 +599,7 @@ void cmd_list(void) {
 	}
 	else if((p = checkstring(cmdline, (unsigned char*)"FUNCTIONS"))) {
 		m = 0;
-		step = Option.Width / 18;
+		step = OptionWidth / 18;
 		char** c = (char**)GetTempMemory((TokenTableSize + 5) * sizeof(*c) + (TokenTableSize + 5) * 18);
 		for (i = 0; i < TokenTableSize + 5; i++) {
 			c[m] = (char*)((int)c + sizeof(char*) * (TokenTableSize + 5) + m * 18);
@@ -642,7 +645,7 @@ void cmd_list(void) {
 void ListNewLine(int* ListCnt, int all) {
 	MMPrintString((char *)"\r\n");
 	(*ListCnt)++;
-	if(!all && *ListCnt >= Option.Height) {
+	if(!all && *ListCnt >= OptionHeight) {
 		MMPrintString((char *)"PRESS ANY KEY ...");
 		MMgetchar();
 		MMPrintString((char *)"\r                 \r");
@@ -662,7 +665,7 @@ void ListProgramFlash(unsigned char* p, int all) {
 			p = llist((unsigned char*) b, (unsigned char *)p);                                        // otherwise expand the line
 			pp = b;
 			while (*pp) {
-				if(MMCharPos >= Option.Width) ListNewLine(&ListCnt, all);
+				if(MMCharPos >= OptionWidth) ListNewLine(&ListCnt, all);
 				MMputchar(*pp++);
 			}
 			ListNewLine(&ListCnt, all);
@@ -679,7 +682,7 @@ void ListProgram(unsigned char* pp, int all) {
 		strcpy(buff, lastfileedited);
 	}
 	else {
-		strcpy(buff, (const char *)pp);
+		fullfilename((char *)pp, buff, NULL);
 	}
 	if(!existsfile(buff))error((char*)"File not found");
 	fnbr = FindFreeFileNbr();
@@ -689,7 +692,7 @@ void ListProgram(unsigned char* pp, int all) {
 		MMgetline(fnbr, (char*)buff);									    // get the input line
 		for (i = 0; i < (int)strlen(buff); i++)if (buff[i] == TAB) buff[i] = ' ';
 		MMPrintString(buff);
-		ListCnt += strlen(buff) / Option.Width;
+		ListCnt += strlen(buff) / OptionWidth;
 		ListNewLine(&ListCnt, all);
 	}
 	FileClose(fnbr);
@@ -731,14 +734,10 @@ void execute(char* mycmd) {
 	}
 	else {
 		unsigned char* p = inpbuf;
-		char* q, * s=NULL;
+		char * s=NULL;
 		char fn[STRINGSIZE] = { 0 };
 		p[0] = GetCommandValue((unsigned char *)"RUN");
 		memmove(&p[1], &p[4], strlen((char *)p) - 4);
-		if ((q = strchr((char *)p, ':'))) {
-			q--;
-			*q = '0';
-		}
 		p[strlen((char*)p) - 3] = 0;
 //		MMPrintString(fn); PRet();
 //		CloseAudio(1);
@@ -754,6 +753,9 @@ void cmd_execute(void) {
 
 void cmd_run(void) {
 	skipspace(cmdline);
+	memset(runcmd, 0, STRINGSIZE);
+	memcpy(runcmd, cmdline, strlen((char *)cmdline));
+
 	if (*cmdline && *cmdline != '\'') {
 		if (!FileLoadProgram(cmdline, 0)) return;
 	}
@@ -796,6 +798,8 @@ void cmd_new(void) {
 	uSec(250000);
 	memset(inpbuf, 0, STRINGSIZE);
 	memset(lastfileedited, 0, STRINGSIZE);
+	memset(Option.lastfilename, 0, STRINGSIZE);
+	SaveOptions();
 	longjmp(mark, 1);							                    // jump back to the input prompt
 }
 
@@ -1651,7 +1655,11 @@ void cmd_randomize(void) {
 	int i;
 	getargs(&cmdline, 1, (unsigned char *)",");
 	if(argc == 1)i = (int)getinteger(argv[0]);
-	else i = rand(); //******
+	else {
+		int64_t j;
+		QueryPerformanceCounter((LARGE_INTEGER*)&j);
+		i = (int)(j & 0xFFFFFFFF);
+	}
 	if(i < 0) error((char *)"Number out of bounds");
 	srand(i);
 }
@@ -1746,8 +1754,18 @@ void cmd_read(void) {
 	int i, j, k, len, card;
 	unsigned char *p, datatoken, *lineptr = NULL, *ptr;
 	int vcnt, vidx, num_to_read = 0;
-	getargs(&cmdline, (MAX_ARG_COUNT * 2) - 1, (unsigned char *)",");                // getargs macro must be the first executable stmt in a block
+	if (checkstring(cmdline, (unsigned char*)"SAVE")) {
+		SaveNextDataLine = NextDataLine;
+		SaveNextData = NextData;
+		return;
+	}
+	if (checkstring(cmdline, (unsigned char*)"RESTORE")) {
+		NextDataLine = SaveNextDataLine;
+		NextData = SaveNextData;
+		return;
+	}
 
+	getargs(&cmdline, (MAX_ARG_COUNT * 2) - 1, (unsigned char *)",");                // getargs macro must be the first executable stmt in a block
 	if(argc == 0) error((char *)"Syntax");
 	// first count the elements and do the syntax checking
 	for(vcnt = i = 0; i < argc; i++) {

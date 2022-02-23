@@ -124,7 +124,6 @@ void cmd_debug(void);
 { (unsigned char*)"Input",		T_CMD,				0, cmd_input },
 { (unsigned char*)"Let",		T_CMD,				0, cmd_let },
 { (unsigned char*)"List",		T_CMD,				0, cmd_list },
-//******{ (unsigned char*)"Load",		T_CMD,				0, cmd_load },
 { (unsigned char*)"Local",		T_CMD,				0, cmd_dim },
 { (unsigned char*)"Loop",		T_CMD,				0, cmd_loop },
 { (unsigned char*)"New",		T_CMD,				0, cmd_new },
@@ -137,7 +136,6 @@ void cmd_debug(void);
 { (unsigned char*)"Restore",            T_CMD,				0, cmd_restore },
 { (unsigned char*)"Return",		T_CMD,				0, cmd_return, },
 { (unsigned char*)"Run",		T_CMD,				0, cmd_run },
-//******{ (unsigned char*)"Save",		T_CMD,				0, cmd_save },
 { (unsigned char*)"Static",		T_CMD,				0, cmd_dim },
 { (unsigned char*)"Sub",		T_CMD,				0, cmd_subfun },
 //	{ (unsigned char *)"TROFF",		T_CMD,				0, cmd_troff	},
@@ -151,6 +149,7 @@ void cmd_debug(void);
 { (unsigned char*)"Execute",	T_CMD,				0, cmd_execute },
 { (unsigned char*)"Quit",	    T_CMD,				0, cmd_quit },
 { (unsigned char*)"Console",	    T_CMD,				0, cmd_debug },
+
 #endif
 
 
@@ -230,4 +229,8 @@ extern unsigned char* TraceBuff[TRACE_BUFF_SIZE];
 extern int TraceBuffIndex;                                          // used for listing the contents of the trace buffer
 extern int OptionErrorSkip;
 extern char *MMErrMsg;
+extern char runcmd[STRINGSIZE];
+extern unsigned char* SaveNextDataLine;
+extern int SaveNextData;
+
 #endif

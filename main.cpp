@@ -61,6 +61,7 @@ volatile float fSynthFrequencyR = 261.63f;
 volatile float fFilterVolumeL = 1.0f;
 volatile float fFilterVolumeR = 1.0f;
 int nSamplePos = 0;
+volatile int  _excep_code = 0;
 float fPreviousSamples[4096];
 using clock_type = std::chrono::high_resolution_clock;
 using namespace std::literals;
@@ -374,7 +375,7 @@ int main(int argc, char* argv[]) {
 			SystemMode = MODE_RUN;
 			uSec(100000);
 			KEYLIFOpointer = 0;
-			myHandle = CreateThread(0, 0, Basic, &myCounter, 0, &BasicID);
+			myHandle = CreateThread(0, 0, Basic, NULL, 0, &BasicID);
 			break;
 		case MODE_SAMPLERATE:
 			olc::SOUND::DestroyAudio();

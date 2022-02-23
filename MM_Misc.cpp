@@ -48,6 +48,10 @@ const char* CaseList[] = { "", "LOWER", "UPPER" };
 const char* KBrdList[] = { "", "US", "FR", "DE", "IT", "BE", "UK", "ES" };
 unsigned char* OnKeyGOSUB = NULL;
 int64_t fasttimerat0;
+MMFLOAT optionangle = 1.0;
+int optiony = 0;
+
+int ConsoleRepeat = 0;
 #define EPOCH_ADJUSTMENT_DAYS	719468L
 /* year to which the adjustment was made */
 #define ADJUSTED_EPOCH_YEAR	0
@@ -315,8 +319,7 @@ void cmd_autosave(void) {
     if (CurrentLinePtr) error((char *)"Invalid in a program");
     if ((*cmdline == 0 || *cmdline == '\''))error((char *)"Syntax");
     r = getCstring(cmdline);
-    if (strchr((char *)cmdline, '.') == NULL) strcat((char*)r, ".BAS");
-    strcpy(fname, (const char *)r);
+    fullfilename((char *)r, fname, ".BAS");
     ClearProgram();                                                 // clear any leftovers from the previous program
     p = buf = (unsigned char *)GetMemory(EDIT_BUFFER_SIZE);
     CrunchData(&p, 0);                                              // initialise the crunch data subroutine
@@ -385,6 +388,8 @@ void cmd_autosave(void) {
     SaveProgramToMemory(buf, true);
     FreeMemory(buf);
     strcpy(lastfileedited, fname);
+    strcpy(Option.lastfilename, fname);
+    SaveOptions();
     if (c == F2) {
         ClearVars(0);
         strcpy((char *)inpbuf, (char *)"RUN\r\n");
@@ -491,12 +496,28 @@ void cmd_timer(void) {
     QueryPerformanceCounter((LARGE_INTEGER*)&fasttimerat0);
     fasttimerat0 -= getinteger(++cmdline)/1000 * frequency;
 }
+void cmd_restart(void) {
+    _excep_code = RESTART_NOAUTORUN;
+    SoftReset();
+}
 
 void cmd_test(void) {
-    getargs(&cmdline, 5, (unsigned char*)",");
-//    float a = getnumber(argv[0]);
-//    float b= getnumber(argv[2]);
+    _excep_code = 0;
+    SoftReset();
 }
+void cmd_watchdog(void) {
+    int i;
+
+    if (checkstring(cmdline, (unsigned char *)"OFF") != NULL) {
+        WDTimer = 0;
+    }
+    else {
+        i = (int)getinteger(cmdline);
+        if (i < 1) error((char*)"Invalid argument");
+        WDTimer = i;
+    }
+}
+
 
 // this is invoked as a function
 void fun_timer(void) {
@@ -604,10 +625,9 @@ void printoptions(void) {
         PO2Str("F9", (char*)cc, 1);
     }
     char buff[30] = { 0 };
-    sprintf(buff, "Current display %d,%d\r\n", Option.Height, Option.Width);
+    sprintf(buff, "Current display %d,%d\r\n", OptionHeight, OptionWidth);
     MMPrintString(buff);
     return;
-
 }
 
 void cmd_option(void) {
@@ -617,7 +637,8 @@ void cmd_option(void) {
         char* p;
         int i = 0;
         DWORD j = 0;
-        p = (char*)getCstring(tp);										// get the directory name and convert to a standard C string
+        p = (char*)getCstring(tp);	
+        if (!dirExists((const char*)p)) error((char*)"Directory does not exist");// get the directory name and convert to a standard C string
         i = (int)SetCurrentDirectoryA(p);
         if (i == 0) {
             j = GetLastError();
@@ -656,6 +677,7 @@ void cmd_option(void) {
         int mode = 9, DefaultFont = 1;
         bool fullscreen = 0;
         getargs(&tp, 3, (unsigned char*)",");
+        if (!(argc == 1 || argc == 3))error((char*)"Syntax");
         if (CurrentLinePtr) error((char *)"Invalid in a program");
         if (checkstring(argv[0], (unsigned char*)"8")) {
             mode = 8;
@@ -697,7 +719,7 @@ void cmd_option(void) {
             mode = 18;
             DefaultFont = (3 << 4) | 1;
         }
-       else error((char *)"Invalid mode");
+        else error((char *)"Invalid mode");
         if (argc == 3)fullscreen = (bool)getint(argv[2], 0, 1);
         Option.mode = mode;
         Option.DefaultFont = DefaultFont;
@@ -715,6 +737,19 @@ void cmd_option(void) {
         if (DimUsed) error((char*)"Must be before DIM or LOCAL");
         OptionBase = (int)getint(tp, 0, 1);
         return;
+    }
+
+    tp = checkstring(cmdline, (unsigned char*)"ANGLE");
+    if (tp) {
+        if (checkstring(tp, (unsigned char*)"DEGREES")) { optionangle = RADCONV; return; }
+        if (checkstring(tp, (unsigned char*)"RADIANS")) { optionangle = 1.0; return; }
+    }
+
+    tp = checkstring(cmdline, (unsigned char*)"Y_AXIS");
+    if (tp) {
+        if (CurrentLinePtr == NULL) error((char *)"Only valid in a program");
+        if (checkstring(tp, (unsigned char*)"UP")) { optiony = 1; return; }
+        if (checkstring(tp, (unsigned char*)"DOWN")) { optiony = 0; return; }
     }
 
     if (tp) {
@@ -787,6 +822,11 @@ void cmd_option(void) {
         else strcpy((char*)Option.F9key, p);
         SaveOptions();
         return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"CONSOLE REPEAT");
+    if (tp) {
+        if (checkstring(tp, (unsigned char*)"OFF")) { ConsoleRepeat = 0; return; }
+        if (checkstring(tp, (unsigned char*)"ON")) { ConsoleRepeat = 1; return; }
     }
     tp = checkstring(cmdline, (unsigned char*)"AUTORUN");
     if (tp) {
@@ -877,12 +917,12 @@ void fun_device(void) {
 void fun_info(void) {
     unsigned char* tp;
     sret = (unsigned char *)GetTempMemory(STRINGSIZE);                                  // this will last for the life of the command
-    tp = checkstring(ep, (unsigned char *)"FONT POINTER");
+/*    tp = checkstring(ep, (unsigned char*)"FONT POINTER");
     if (tp) {
         iret = (int64_t)((uint32_t)&FontTable[getint(tp, 1, FONT_TABLE_SIZE) - 1]);
         targ = T_INT;
         return;
-    }
+    }*/
     tp = checkstring(ep, (unsigned char*)"SOUND");
     if (tp) {
         switch (CurrentlyPlaying) {
@@ -912,12 +952,12 @@ void fun_info(void) {
         targ = T_INT;
         return;
     }
-    tp = checkstring(ep, (unsigned char *)"FONT ADDRESS");
+/*    tp = checkstring(ep, (unsigned char*)"FONT ADDRESS");
     if (tp) {
         iret = (int64_t)((uint32_t)FontTable[getint(tp, 1, FONT_TABLE_SIZE) - 1]);
         targ = T_INT;
         return;
-    }
+    }*/
     tp = checkstring(ep, (unsigned char*)"MAX PAGES");
     if (tp) {
         iret = MAXPAGES;
@@ -936,10 +976,28 @@ void fun_info(void) {
         targ = T_INT;
         return;
     }
+    tp = checkstring(ep, (unsigned char*)"DIRECTORY");
+    if (tp) {
+        sret = CtoM((unsigned char*)MMgetcwd());
+        targ = T_STR;
+        return;
+    }
+    tp = checkstring(ep, (unsigned char*)"EXISTS FILE");
+    if (tp) {
+        iret = existsfile((char*)getCstring(tp));
+        targ = T_INT;
+        return;
+    }
+    tp = checkstring(ep, (unsigned char*)"EXISTS DIR");
+    if (tp) {
+        iret = (int64_t)dirExists((char*)getCstring(tp));
+        targ = T_INT;
+        return;
+    }
     tp = checkstring(ep, (unsigned char *)"OPTION");
     if (tp) {
         if (checkstring(tp, (unsigned char *)"AUTORUN")) {
-            if (Option.Autorun == false)strcpy((char *)sret, "Off");
+            if (Option.Autorun == false)strcpy((char *)sret, "Off"); 
             else strcpy((char *)sret, "On");
         }
         else if (checkstring(tp, (unsigned char *)"EXPLICIT")) {
@@ -981,23 +1039,6 @@ void fun_info(void) {
         return;
     }
     /*
-    tp = checkstring(ep, (unsigned char *)"FILESIZE");
-    if (tp) {
-        int i, j;
-        DIR djd;
-        FILINFO fnod;
-        memset(&djd, 0, sizeof(DIR));
-        memset(&fnod, 0, sizeof(FILINFO));
-        char* p = getCstring(tp);
-
-        ErrorCheck(0);
-        FSerror = f_stat(p, &fnod);
-        if (FSerror != FR_OK) { iret = -1; targ = T_INT; strcpy(MMErrMsg, FErrorMsg[4]); return; }
-        if ((fnod.fattrib & AM_DIR)) { iret = -2; targ = T_INT; strcpy(MMErrMsg, FErrorMsg[4]); return; }
-        iret = fnod.fsize;
-        targ = T_INT;
-        return;
-    }
     tp = checkstring(ep, (unsigned char *)"MODIFIED");
     if (tp) {
         int i, j;
@@ -1049,9 +1090,10 @@ void fun_info(void) {
             return;
         }
         else if (checkstring(ep, (unsigned char*)"CURRENT")) {
-            strcpy((char *)sret, MMgetcwd());
-            strcat((char*)sret, "\\");
-            strcat((char*)sret, lastfileedited);
+//            strcpy((char *)sret, MMgetcwd());
+//            strcat((char*)sret, "\\");
+            if (!*lastfileedited)strcpy((char*)sret, (char*)"NONE");
+            else strcpy((char*)sret, lastfileedited);
         }
         else if (checkstring(ep, (unsigned char *)"FONTWIDTH")) {
             iret = FontTable[gui_font >> 4][0] * (gui_font & 0b1111);
@@ -1059,17 +1101,7 @@ void fun_info(void) {
             return;
         }
         else if (tp=checkstring(ep, (unsigned char*)"FILESIZE")) {
-            WIN32_FIND_DATAA fdFile;
-            HANDLE hFind = NULL;
-            char* p = (char *)getCstring(tp);
-            if ((hFind = FindFirstFileA((LPCSTR)p, &fdFile)) == INVALID_HANDLE_VALUE)error((char *)"File not found");
-            iret = ((int64_t)fdFile.nFileSizeHigh<<32) | (int64_t)fdFile.nFileSizeLow;
-            FindClose(hFind);
-            targ = T_INT;
-            return;
-        }
-        else if (checkstring(ep, (unsigned char*)"CPU CLOCK")) {
-            iret = frequency;
+            iret = filesize((char *)getCstring(tp));
             targ = T_INT;
             return;
         }
@@ -1092,12 +1124,12 @@ void fun_info(void) {
             return;
         }
         else if (checkstring(ep, (unsigned char*)"WIDTH")) {
-            iret = Option.Width;
+            iret = xres[VideoMode]/gui_font_width;
             targ = T_INT;
             return;
         }
         else if (checkstring(ep, (unsigned char*)"HEIGHT")) {
-            iret = Option.Height;
+            iret = yres[VideoMode] / gui_font_height;
             targ = T_INT;
             return;
         }
@@ -1117,7 +1149,7 @@ void fun_info(void) {
             return;
         }
         else if (checkstring(ep, (unsigned char *)"ERRMSG")) {
-            strcpy((char *)sret, MMErrMsg);
+            if(MMErrMsg)strcpy((char *)sret, MMErrMsg);
         }
         else if (checkstring(ep, (unsigned char *)"FCOLOUR") || checkstring(ep, (unsigned char *)"FCOLOR")) {
             iret = gui_fcolour;
@@ -1152,7 +1184,7 @@ void fun_info(void) {
 }
 extern "C" void SoftReset(void) {
     SystemMode = MODE_SOFTRESET;
-    longjmp(mark, 1);
+    while (1) {}
 }
 
 void fun_date(void) {
