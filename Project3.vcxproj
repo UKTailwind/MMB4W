@@ -110,7 +110,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>Advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Advapi32.lib;Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -145,6 +145,8 @@
   <ItemGroup>
     <ClCompile Include="Basic.cpp" />
     <ClCompile Include="BmpDecoder.cpp" />
+    <ClCompile Include="cJSON.c" />
+    <ClCompile Include="cJSON_Utils.c" />
     <ClCompile Include="Commands.cpp" />
     <ClCompile Include="Draw.cpp" />
     <ClCompile Include="Editor.cpp" />
@@ -168,6 +170,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="audio.h" />
+    <ClInclude Include="cJSON.h" />
+    <ClInclude Include="cJSON_Utils.h" />
     <ClInclude Include="Commands.h" />
     <ClInclude Include="Configuration.h" />
     <ClInclude Include="Draw.h" />

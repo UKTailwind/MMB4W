@@ -1518,8 +1518,172 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
     void cmd_box(void) {
         int x1, y1, wi, h, w = 0, n = 0, i, nc = 0, nw = 0, nf = 0, hmod, wmod;
         int64_t c = 0, f = 0;
+        unsigned char* tp;
         long long int* x1ptr=NULL, * y1ptr = NULL, * wiptr = NULL, * hptr = NULL, * wptr = NULL, * cptr = NULL, * fptr = NULL;
         MMFLOAT* x1fptr = NULL, * y1fptr = NULL, * wifptr = NULL, * hfptr = NULL, * wfptr = NULL, * cfptr = NULL, * ffptr = NULL;
+        if ((tp = checkstring(cmdline, (unsigned char *)"AND_PIXELS"))) {
+            int64_t ConvertedColour;
+            uint32_t *p, *q;
+            getargs(&tp, 11, (unsigned char*)",");
+            if (argc < 9) error((char *)"Syntax");
+            x1 = (int)getinteger(argv[0]);
+            y1 = (int)getinteger(argv[2]);
+            w = (int)getinteger(argv[4]);
+            h = (int)getinteger(argv[6]);
+            ConvertedColour = getColour(argv[8], 0);
+            if (argc >= 10) {
+                if (checkstring(argv[10], (unsigned char*)"FRAMEBUFFER")) {
+                    ReadPage = WPN;
+                }
+                else {
+                    ReadPage = (int)getint(argv[10], 0, MAXPAGES);
+                }
+            }
+            int readlimx = PageTable[ReadPage].xmax;
+            int readlimy = PageTable[ReadPage].ymax;
+            if (w < 1 || h < 1) {
+                ReadPage = WritePage;
+                return;
+            }
+            if (x1 < 0) {
+                w += x1;
+                x1 = 0;
+            }
+            if (y1 < 0) {
+                h += y1;
+                y1 = 0;
+            }
+            if (x1 + w > readlimx) {
+                w = readlimx - x1;
+            }
+            if (y1 + h > readlimy) {
+                h = readlimy - y1;
+            }
+            if (w < 1 || h < 1 || x1 < 0 || x1 + w > readlimx || y1 < 0 || y1 + h > readlimy) {
+                ReadPage = WritePage;
+                return;
+            }
+            int size = w * h * sizeof(uint32_t);
+            p = q = (uint32_t *)GetMemory(size);
+            ReadBuffer(x1, y1, x1 + w - 1, y1 + h - 1, q);
+            size >>= 2;
+            while (size--) {
+                *p++ &= (uint32_t)(ConvertedColour & 0xFFFFFFFF);
+            }
+            DrawBuffer(x1, y1, x1 + w - 1, y1 + h - 1, q);
+            ReadPage = WritePage;
+            FreeMemorySafe((void**)&q);
+            return;
+        }
+        else if ((tp = checkstring(cmdline, (unsigned char*)"OR_PIXELS"))) {
+            int64_t ConvertedColour;
+            uint32_t *p, *q;
+            getargs(&tp, 11, (unsigned char*)",");
+            if (argc < 9) error((char*)"Syntax");
+            x1 = (int)getinteger(argv[0]);
+            y1 = (int)getinteger(argv[2]);
+            w = (int)getinteger(argv[4]);
+            h = (int)getinteger(argv[6]);
+            ConvertedColour = getColour(argv[8], 0);
+            if (argc >= 10) {
+                if (checkstring(argv[10], (unsigned char*)"FRAMEBUFFER")) {
+                    ReadPage = WPN;
+                }
+                else {
+                    ReadPage = (int)getint(argv[10], 0, MAXPAGES);
+                }
+            }
+            int readlimx = PageTable[ReadPage].xmax;
+            int readlimy = PageTable[ReadPage].ymax;
+            if (w < 1 || h < 1) {
+                ReadPage = WritePage;
+                return;
+            }
+            if (x1 < 0) {
+                w += x1;
+                x1 = 0;
+            }
+            if (y1 < 0) {
+                h += y1;
+                y1 = 0;
+            }
+            if (x1 + w > readlimx) {
+                w = readlimx - x1;
+            }
+            if (y1 + h > readlimy) {
+                h = readlimy - y1;
+            }
+            if (w < 1 || h < 1 || x1 < 0 || x1 + w > readlimx || y1 < 0 || y1 + h > readlimy) {
+                ReadPage = WritePage;
+                return;
+            }
+            int size = w * h * sizeof(uint32_t);
+            p = q = (uint32_t*)GetMemory(size);
+            ReadBuffer(x1, y1, x1 + w - 1, y1 + h - 1, q);
+            size >>= 2;
+            while (size--) {
+                *p++ |= (uint32_t)(ConvertedColour & 0xFFFFFFFF);
+            }
+            DrawBuffer(x1, y1, x1 + w - 1, y1 + h - 1, q);
+            ReadPage = WritePage;
+            FreeMemorySafe((void**)&q);
+            return;
+        }
+        else if ((tp = checkstring(cmdline, (unsigned char*)"XOR_PIXELS"))) {
+        int64_t ConvertedColour;
+        uint32_t *p, *q;
+        getargs(&tp, 11, (unsigned char*)",");
+        if (argc < 9) error((char*)"Syntax");
+        x1 = (int)getinteger(argv[0]);
+        y1 = (int)getinteger(argv[2]);
+        w = (int)getinteger(argv[4]);
+        h = (int)getinteger(argv[6]);
+        ConvertedColour = getColour(argv[8], 0);
+        if (!ARGBenabled) ConvertedColour &= 0xFFFFFF; //don't zero the transparency
+        if (argc >= 10) {
+            if (checkstring(argv[10], (unsigned char*)"FRAMEBUFFER")) {
+                ReadPage = WPN;
+            }
+            else {
+                ReadPage = (int)getint(argv[10], 0, MAXPAGES);
+            }
+        }
+        int readlimx = PageTable[ReadPage].xmax;
+        int readlimy = PageTable[ReadPage].ymax;
+        if (w < 1 || h < 1) {
+            ReadPage = WritePage;
+            return;
+        }
+        if (x1 < 0) {
+            w += x1;
+            x1 = 0;
+        }
+        if (y1 < 0) {
+            h += y1;
+            y1 = 0;
+        }
+        if (x1 + w > readlimx) {
+            w = readlimx - x1;
+        }
+        if (y1 + h > readlimy) {
+            h = readlimy - y1;
+        }
+        if (w < 1 || h < 1 || x1 < 0 || x1 + w > readlimx || y1 < 0 || y1 + h > readlimy) {
+            ReadPage = WritePage;
+            return;
+        }
+        int size = w * h * sizeof(uint32_t);
+        p = q = (uint32_t*)GetMemory(size);
+        ReadBuffer(x1, y1, x1 + w - 1, y1 + h - 1, q);
+        size >>= 2;
+        while (size--) {
+            *p++ ^= (uint32_t)(ConvertedColour & 0xFFFFFFFF);
+        }
+        DrawBuffer(x1, y1, x1 + w - 1, y1 + h - 1, q);
+        ReadPage = WritePage;
+        FreeMemorySafe((void**)&q);
+        return;
+        }
         getargs(&cmdline, 13, (unsigned char*)",");
         if (!(argc & 1) || argc < 7) error((char *)"Argument count");
         getargaddress(argv[0], &x1ptr, &x1fptr, &n);

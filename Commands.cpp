@@ -740,9 +740,8 @@ void execute(char* mycmd) {
 		memmove(&p[1], &p[4], strlen((char *)p) - 4);
 		p[strlen((char*)p) - 3] = 0;
 //		MMPrintString(fn); PRet();
-//		CloseAudio(1);
+		CloseAudio(1);
 		strcpy((char *)tknbuf, (char*)inpbuf);
-		if (CurrentlyPlaying != P_NOTHING)CloseAudio();
 		longjmp(jmprun, 1);
 	}
 }

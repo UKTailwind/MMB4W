@@ -248,7 +248,7 @@ const char* C_HL_keywords[] = { "Arc","AutoSave","Blit",
 		"Read","Rem","Restore","Return","Rmdir",
 		"Run","Save","Seek","Select Case",
 		"SetTick","Sort",
-		"SPRITE","Static","Sub","TEMPR START","Text",
+		"SPRITE","Static","Sub","TCP","TEMPR START","Text",
 		"Time","Timer","Trace","Triangle",
 		"TURTLE","VAR","WatchDog","While",
 		"Abs","ACos","And",
@@ -257,9 +257,9 @@ const char* C_HL_keywords[] = { "Arc","AutoSave","Blit",
 		"Cos","Cwd$","Date$","DateTime$","Day$",
 		"Deg","Dir$","Else","Eof",
 		"Epoch","Eval","Exp","Field$","Fix",
-		"For","Format$","GoSub","GoTo",
+		"For","Format$","GetIP$","GoSub","GoTo",
 		"GPS","Hex$","Inkey$","Input$","Instr",
-		"Int","inv","KeyDown","LCase$","LCompare","Left$",
+		"Int","inv","JSON$","KeyDown","LCase$","LCompare","Left$",
 		"Len","LGetByte","LGetStr$","LInStr","LLen","Loc",
 		"Lof","Log","math","Max","Mid$",
 		"Min","mmdebug","MM.Device$","MM.ErrMsg$","MM.Errno",
@@ -670,7 +670,7 @@ int editorSyntaxToColor(int hl) {
 
 void editorSelectSyntaxHighlight() {
 	E.syntax = NULL;
-	if (E.filename == NULL || Option.ColourCode != true)
+	if (E.filename == NULL || Option.ColourCode ==0)
 		return;
 
 	char* ext = strrchr(E.filename, '.');
@@ -1688,19 +1688,21 @@ int editorProcessKeypress() {
 				FreeMemorySafe((void**)&editCbuff);*/
 				gui_fcolour = PromptFC;
 				gui_bcolour = PromptBC;
-//				MMPrintString("\033[2J");
 //				MMPrintString("\033[H");
 				MX470Display(DISPLAY_CLS);                          // clear screen on the MX470 display only
 				MX470Cursor(0, 0);
 				BreakKey = BreakKeySave;
-				ClearVars(0);
+//				ClearVars(0);
 				SetFont(Option.DefaultFont);
 				setterminal();
 //				reset_CLUT();
-				strcpy((char*)inpbuf, "RUN\r\n");
-				tokenise(true);                                             // turn into executable code
-				ExecuteProgram(tknbuf);                                     // execute the line straight away
-//******				cleanend();
+				memset(tknbuf, 0, STRINGSIZE);
+				tknbuf[0] = GetCommandValue((unsigned char*)"RUN");
+				strcat((char*)tknbuf, "\"");
+				strcat((char*)tknbuf, lastfileedited);
+				strcat((char*)tknbuf, "\"");
+				longjmp(jmprun, 1);
+				//******				cleanend();
 			}
 
 			E.lastkey = c;

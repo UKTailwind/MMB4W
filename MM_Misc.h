@@ -68,6 +68,7 @@ void cmd_font(void);
 void fun_mouse(void);
 void cmd_mouse(void);
 void cmd_restart(void);
+void fun_json(void);
 #endif
 
 
@@ -123,6 +124,7 @@ void cmd_restart(void);
 { (unsigned char*)"Format$(",	T_FUN | T_STR,			0, fun_format },
 { (unsigned char*)"Keydown(",		T_FUN | T_INT,		0, fun_keydown },
 { (unsigned char*)"Peek(",		T_FUN | T_INT | T_STR | T_NBR,			0, fun_peek },
+{ (unsigned char*)"JSON$(",		T_FUN | T_STR,          0, fun_json },
 #endif
 #if !defined(INCLUDE_COMMAND_TABLE) && !defined(INCLUDE_TOKEN_TABLE)
 extern "C" int check_interrupt(void);

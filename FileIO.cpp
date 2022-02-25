@@ -40,6 +40,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "picojpeg.h"
 #include "upng.h"
 #include "Shlwapi.h"
+
 extern "C" uint8_t BMP_bDecode(int x, int y, int fnbr);
 extern "C" int strcasecmp(const char* s1, const char* s2);
 void tidypath(char* p, char* qq);
@@ -51,6 +52,8 @@ static uint32_t g_nInFileOfs;
 static int jpgfnbr;
 // 8*8*4 bytes * 3 = 768
 int16_t* gCoeffBuf;
+int system_active = 0;
+FILE* system_file;
 
 // 8*8*4 bytes * 3 = 768
 uint8_t* gMCUBufR;
@@ -77,6 +80,12 @@ a_dlist* dlist;
 
 int nDefines;
 int LineCount = 0;
+extern int opensocket;
+extern int client_fd;
+int udpopen = 0,tcpopen = 0;
+SOCKET udpsockfd, tcpsockfd;
+;
+struct sockaddr_in si_me, si_other, tcp_other;
 
 struct option_s Option;
 extern "C" void ResetOptions(void) {
@@ -126,19 +135,14 @@ extern "C" char FileGetChar(int fnbr) {
     return ch;
 }
 extern "C" int existsfile(char* fname) {
-    char filename[STRINGSIZE] = { 0 };
-    char path[STRINGSIZE] = { 0 };
-    char q[STRINGSIZE] = { 0 };
-    strcpy(q, fname);
-    tidyfilename(q, path, filename);
-    strcpy(q, path);
-    strcat(q, filename);
-    MMPrintString(q); PRet(); 
-    WIN32_FIND_DATAA fdFile;
-    HANDLE hFind = NULL;
-    if ((hFind = FindFirstFileA((LPCSTR)q, &fdFile)) == INVALID_HANDLE_VALUE)return  0;
-    FindClose(hFind);
-    return 1;
+    DWORD ftyp = GetFileAttributesA(fname);
+    if (ftyp == INVALID_FILE_ATTRIBUTES)
+        return false;  //something is wrong with your path!
+
+    if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
+        return false;   // this is a directory!
+
+    return true;    // this is not a directory!
 }
 extern "C" int64_t filesize(char* fname) {
     char filename[STRINGSIZE] = { 0 };
@@ -1233,11 +1237,11 @@ extern "C" bool dirExists(const char * dirName_in)
 
     return false;    // this is not a directory!
 }
-void tidypath(char* p, char* qq) {
+extern "C" void tidypath(char* p, char* qq) {
     strcpy(qq, p);
     for (int i = 0; i < (int)strlen(qq); i++)if (qq[i] == '/')qq[i] = '\\';
     if (!(qq[1] == ':' || qq[0] == '\\')) {
-        char* q = (char*)GetTempMemory(STRINGSIZE);
+        char q[STRINGSIZE] = { 0 };
         strcpy(q, MMgetcwd());
         strcat(q, "\\");
         strcat(q, qq);
@@ -1316,6 +1320,7 @@ void cmd_chdir(void) {
     p = (char *)getCstring(cmdline);
     // get the directory name and convert to a standard C string
     tidypath(p, qq);
+    if (!dirExists(p))error((char*)"Directory does not exist");
     i= (int)SetCurrentDirectoryA(qq);
     if (i==0) {
         j = GetLastError();
@@ -1527,7 +1532,7 @@ void fun_eof(void) {
     if (argc == 0) error((char*)"Syntax");
     if (*argv[0] == '#') argv[0]++;
     fnbr = (int)getinteger(argv[0]);
-    iret = MMfeof(fnbr);
+    iret = (MMfeof(fnbr) ? 1:0);
     targ = T_INT;
 }
 void fun_inputstr(void) {
@@ -1809,4 +1814,287 @@ void fun_port(void) {
     int a = (int)getint(ep, 0, 127);
     iret = TestPort(a);
     targ = T_INT;
+}
+void cmd_tcp(void) {
+
+    unsigned char* tp;
+    char *tcp_SERVER;
+    static int tcp_server_PORT;//, tcp_client_PORT;
+//    const socklen_t slen = sizeof(struct sockaddr_in);
+    tp = checkstring(cmdline, (unsigned char *)"CLIENT");
+    if (tp) {
+        getargs(&tp, 3, (unsigned char*)",");
+        if (argc != 3)error((char *)"Syntax");
+        if (tcpopen)error((char *)"Already open");
+        char *ip;
+        struct hostent* he;
+        tcp_SERVER = (char*)getCstring(argv[0]);
+
+        if ((he = gethostbyname(tcp_SERVER)) == NULL)
+        {
+            // get the host info
+            error((char*)"Not Found");
+        }
+        ip = inet_ntoa(*(struct in_addr*)*he->h_addr_list);
+        tcp_server_PORT = (int)getint(argv[2], 1, 65535);
+        tcpsockfd = INVALID_SOCKET;
+        memset((char*)&tcp_other, 0, sizeof(tcp_other));
+        tcp_other.sin_addr.s_addr = inet_addr(ip);
+        tcp_other.sin_port = htons(tcp_server_PORT);
+        tcp_other.sin_family = AF_INET;
+        tcpopen = 1;
+        if ((tcpsockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
+            error((char *)"Socket not opened");
+        if (connect(tcpsockfd, (const struct sockaddr*)&tcp_other, sizeof(struct sockaddr_in)) == -1) {
+            MMPrintString(inet_ntoa(tcp_other.sin_addr)); PRet();
+            PInt(ntohs(tcp_other.sin_port)); PRet();
+            error((char *)"connect failed %", WSAGetLastError());
+        }
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"SEND");
+    if (tp) {
+        char* tcp_message;
+        getargs((unsigned char**)&tp, 1, (unsigned char*)",");
+        if (argc != 1)error((char *)"Syntax");
+        if (tcpopen == 0)error((char *)"Not open");
+        tcp_message = (char *)getCstring(argv[0]);
+        if (send(tcpsockfd, tcp_message, strlen(tcp_message), 0) < 0) {
+            error((char *)"send() failed");
+            return;
+        }
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"RECEIVE");
+    if (tp) {
+        unsigned char* retstring;
+        int str1len, bytesRcvd;
+        getargs((unsigned char**)&tp, 1, (unsigned char*)",");
+        if (argc != 1)error((char *)"Syntax");
+        if (tcpopen == 0)error((char *)"Not open");
+        retstring = (unsigned char *)findvar(argv[0], V_FIND);
+        if (!(vartbl[VarIndex].type & T_STR)) error((char *)"Invalid variable");
+        str1len = (vartbl[VarIndex].size);
+        memset(retstring, 0, str1len);
+        if ((bytesRcvd = recv(tcpsockfd, (char *)retstring, str1len - 1, 0)) <= 0)
+            retstring[0] = 0;
+        retstring = CtoM(retstring);
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"CLOSE");
+    if (tp) {
+        if (tcpopen == 0)error((char *)"Not open");
+        tcpopen = 0;
+        closesocket(tcpsockfd);
+        return;
+
+    }
+    error((char *)"Syntax");
+
+}
+void cmd_udp(void) {
+    /*
+    unsigned char* tp;
+    char *udp_SERVER;
+    static int udp_server_PORT, udp_client_PORT;
+    unsigned long mode = 1;
+    const socklen_t slen = sizeof(struct sockaddr_in);
+    tp = checkstring(cmdline, (unsigned char*)"CLIENT");
+    if (tp) {
+        getargs((unsigned char**)&tp, 5, (unsigned char*)",");
+        if (argc != 5)error((char *)"Syntax");
+        if (udpopen)error((char *)"Already open");
+        udp_SERVER = (char *)getCstring(argv[0]);
+        udp_server_PORT = (int)getint(argv[2], 1, 65535);
+        udp_client_PORT = (int)getint(argv[4], 1, 65535);
+        memset((char*)&si_me, 0, sizeof(si_me));
+        memset((char*)&si_other, 0, sizeof(si_other));
+        udpopen = 1;
+        udpsockfd = 0;
+        if ((udpsockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+            error((char *)"Socket not opened");
+        ioctlsocket(udpsockfd, FIONBIO, &mode);
+        if (udpsockfd < 0) error((char *)"ERROR opening socket");
+        si_other.sin_family = AF_INET;
+        si_other.sin_port = htons(udp_server_PORT);
+        if (InetPtonA(AF_INET, udp_SERVER, &si_other.sin_addr) == 0) {
+            error((char *)"inet_aton() failed");
+            return;
+        }
+        si_me.sin_family = AF_INET;
+        si_me.sin_port = htons(udp_client_PORT);
+        si_me.sin_addr.s_addr = htonl(INADDR_ANY);
+        if (bind(udpsockfd, (const struct sockaddr*)&si_me, sizeof(si_me)) == -1)
+            error((char *)"Bind failed");
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"SERVER");
+    if (tp) {
+        int udp_server_PORT;
+        getargs((unsigned char**)&tp, 1, (unsigned char*)",");
+        if (argc != 1)error((char *)"Syntax");
+        if (udpopen)error((char *)"Already open");
+        udpopen = 2;
+        udp_server_PORT = (int)getint(argv[0], 1, 65535);
+        if ((udpsockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+            error((char *)"Socket not opened");
+
+        memset((char*)&si_me, 0, sizeof(si_me));
+        memset((char*)&si_other, 0, sizeof(si_other));
+        si_me.sin_family = AF_INET;
+        si_me.sin_port = htons(udp_server_PORT);
+        si_me.sin_addr.s_addr = htonl(INADDR_ANY);
+        if (bind(udpsockfd, (const struct sockaddr*)&si_me, sizeof(si_me)) == -1)
+            error((char *)"Bind failed");
+        ioctlsocket(udpsockfd, FIONBIO, &mode) ;
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"CLOSE");
+    if (tp) {
+        if (udpopen == 0)error((char *)"Not open");
+        udpopen = 0;
+        if (udpopen == 1) {
+            closesocket(udp_server_PORT);
+            closesocket(udp_client_PORT);
+        }
+        else closesocket(udpsockfd);
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"SEND");
+    if (tp) {
+        char* udp_message;
+        getargs((unsigned char**)&tp, 1, (unsigned char*)",");
+        if (argc != 1)error((char *)"Syntax");
+        if (udpopen == 0)error((char *)"Not open");
+        if (si_other.sin_port == 0)error((char *)"No Client");
+        udp_message = (char *)getCstring(argv[0]);
+        if (sendto(udpsockfd, udp_message, strlen(udp_message), 0, (struct sockaddr*)&si_other, slen) < 0) {
+            error((char *)"sendto() failed");
+            return;
+        }
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"RECEIVE");
+    if (tp) {
+        char* retstring, * otheripadd = NULL;
+        int str1len, str2len;
+        uint64_t* otherport = NULL;
+        getargs((unsigned char**)&tp, 5, (unsigned char*)",");
+        if (argc > 5 || argc < 1)error((char *)"Syntax");
+        if (udpopen == 0)error((char *)"Not open");
+        if (argc > 5) error((char *)"Incorrect number of arguments");
+
+        // get the two variables
+        retstring = (char *)findvar(argv[0], V_FIND);
+        if (!(vartbl[VarIndex].type & T_STR)) error((char *)"Invalid variable");
+        str1len = (vartbl[VarIndex].size);
+        memset(retstring, 0, str1len);
+        if (argc >= 3) {
+            otheripadd = (char*)findvar(argv[2], V_FIND);
+            if (!(vartbl[VarIndex].type & T_STR)) error((char *)"Invalid variable");
+            str2len = (vartbl[VarIndex].size);
+            memset(otheripadd, 0, str2len);
+        }
+        if (argc == 5) {
+            otherport = (uint64_t *)findvar(argv[4], V_FIND);
+            if (!((vartbl[VarIndex].type & T_NBR) || (vartbl[VarIndex].type & T_INT))) error((char *)"Invalid variable");
+        }
+        if (udpopen == 0)error((char *)"Not open");
+        int slen = sizeof(si_other);
+        if (recvfrom(udpsockfd, retstring, 255, 0, (struct sockaddr*)&si_other, (socklen_t*)&slen) == -1) {
+            retstring[0] = 0;
+            if (argc >= 3)otheripadd[0] = 0;
+            if (argc == 5)*otherport = 0;
+            return;
+        }
+        retstring = (char *)CtoM((unsigned char *)retstring);
+        if (argc >= 3) {
+            strcpy(otheripadd, inet_ntoa(si_other.sin_addr));
+            otheripadd = (char *)CtoM((unsigned char*)otheripadd);
+        }
+        if (argc == 5)*otherport = ntohs(si_other.sin_port);
+        return;
+    }
+    error((char *)"Syntax");
+    */
+}
+void cmd_system(void) {
+    char* p;
+    char* buff;
+    getargs(&cmdline, 3, (unsigned char *)",");
+    if (system_active)error((char*)"Background SYSTEM command already active");
+    p = (char *)getCstring(argv[0]);
+    if (argc == 1) {
+        if (p[strlen(p) - 1] == '&')system_active = 1;
+        else system_active = 0;
+        buff = (char *)GetTempMemory(2048 + 256);
+        system_file = _popen(p, "r");
+        if (system_active == 0) {
+            while (!feof(system_file)) {
+                if (fgets(buff, 2048, system_file) != NULL) MMPrintString(buff); MMPrintString((char *)"\r");
+            }
+            _pclose(system_file);
+        }
+    }
+    else if (argc == 3) {
+        void* ptr2 = NULL;
+        int size, i = 0;
+        int64_t* src;
+        char* q;
+        char ic;
+        ptr2 = findvar(argv[2], V_FIND | V_EMPTY_OK);
+        if (vartbl[VarIndex].type & T_INT) {
+            if (vartbl[VarIndex].dims[1] != 0) error((char*)"Invalid variable");
+            if (vartbl[VarIndex].dims[0] <= 0) {		// Not an array
+                error((char*)"Argument 2 must be integer array");
+            }
+            src = (int64_t*)ptr2;
+            q = (char*)&src[1];
+            size = (vartbl[VarIndex].dims[0] - OptionBase) * 8;
+            system_file = _popen(p, "r");
+            while (!feof(system_file) && i < size) {
+                ic = (char)fgetc(system_file);
+                if (!feof(system_file)) {
+                    q[i] = ic;
+                    i++;
+                    if (ic == '\n') {
+                        q[i] = '\r';
+                        i++;
+                    }
+                }
+            }
+            src[0] = i;
+            _pclose(system_file);
+        }
+        else error((char*)"Argument 2 must be integer array");
+    }
+    else error((char*)"Syntax");
+}
+void fun_getip(void) {
+    char* q;
+    char ip[255] = { 0 };
+    struct hostent* he;
+    struct in_addr** addr_list;
+    int i;
+    getargs(&ep, 3, (unsigned char *)",");
+    q = (char *)getCstring(argv[0]);
+
+    if ((he = gethostbyname(q)) == NULL)
+    {
+        // get the host info
+        error((char *)"Not Found");
+    }
+
+    addr_list = (struct in_addr**)he->h_addr_list;
+
+    for (i = 0; addr_list[i] != NULL; i++)
+    {
+        //Return the first one;
+        strcpy(ip, inet_ntoa(*addr_list[i]));
+        MMPrintString(ip); PRet();
+        break;
+    }
+
+    sret = CtoM((unsigned char *)ip);
+    targ = T_STR;
 }

@@ -28,7 +28,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "MMBasic_Includes.h"
 #include <shlobj.h>
 #include "hxcmod.h"
-
+#include <userenv.h>
+#include "cJSON.h"
 extern char* editCbuff;
 extern modcontext mcontext;
 
@@ -978,13 +979,27 @@ void fun_info(void) {
     }
     tp = checkstring(ep, (unsigned char*)"DIRECTORY");
     if (tp) {
-        sret = CtoM((unsigned char*)MMgetcwd());
+        strcpy((char*)sret, MMgetcwd());
+        if (sret[strlen((char*)sret) - 1] != '\\')strcat((char*)sret, "\\");
+        sret = CtoM(sret);
+        targ = T_STR;
+        return;
+    }
+    tp = checkstring(ep, (unsigned char*)"ENVVAR");
+    if (tp) {
+        char* e = (char*)GetTempMemory(4096);
+        int a= GetEnvironmentVariableA((char *)getCstring(tp), e, 4096);
+        if (a) {
+            if (strlen(e) < 254)strcpy((char*)sret, e);
+            else memcpy(sret, e, 254);
+            sret = CtoM(sret);
+        }
         targ = T_STR;
         return;
     }
     tp = checkstring(ep, (unsigned char*)"EXISTS FILE");
     if (tp) {
-        iret = existsfile((char*)getCstring(tp));
+        iret = (int64_t)existsfile((char*)getCstring(tp));
         targ = T_INT;
         return;
     }
@@ -994,8 +1009,22 @@ void fun_info(void) {
         targ = T_INT;
         return;
     }
+    tp = checkstring(ep, (unsigned char*)"EXISTS");
+    if (tp) {
+        iret = (int64_t)(existsfile((char*)getCstring(tp)) || dirExists((char*)getCstring(tp)));
+        targ = T_INT;
+        return;
+    }
     tp = checkstring(ep, (unsigned char *)"OPTION");
     if (tp) {
+        if (checkstring(tp, (unsigned char*)"ANGLE")) {
+            if (optionangle == 1.0)strcpy((char*)sret, "DEGREES");
+            else strcpy((char*)sret, "RADIANS");
+        }
+        else if (checkstring(tp, (unsigned char*)"Y_AXIS")) {
+            if (optiony == 1)strcpy((char*)sret, "UP");
+            else strcpy((char*)sret, "DOWN");
+        }
         if (checkstring(tp, (unsigned char *)"AUTORUN")) {
             if (Option.Autorun == false)strcpy((char *)sret, "Off"); 
             else strcpy((char *)sret, "On");
@@ -1037,6 +1066,12 @@ void fun_info(void) {
         iret = (int64_t)(uint32_t)ProgMemory;
         targ = T_INT;
         return;
+    }
+    tp = checkstring(ep, (unsigned char*)"TRACK");
+    if (tp) {
+        if (CurrentlyPlaying == P_MP3 || CurrentlyPlaying == P_FLAC || CurrentlyPlaying == P_WAV) strcpy((char *)sret, alist[trackplaying].fn);
+        else strcpy((char *)sret, "OFF");
+
     }
     /*
     tp = checkstring(ep, (unsigned char *)"MODIFIED");
@@ -1101,7 +1136,10 @@ void fun_info(void) {
             return;
         }
         else if (tp=checkstring(ep, (unsigned char*)"FILESIZE")) {
-            iret = filesize((char *)getCstring(tp));
+            char* p = (char*)getCstring(tp);
+            if (p[strlen(p) - 1] == '/' || p[strlen(p) - 1] == '\\')error((char*)"Invalid file specification");
+            if(dirExists(p))iret = -2;
+            else iret = filesize((char *)getCstring(tp));
             targ = T_INT;
             return;
         }
@@ -1183,6 +1221,7 @@ void fun_info(void) {
     targ = T_STR;
 }
 extern "C" void SoftReset(void) {
+    WSACleanup();
     SystemMode = MODE_SOFTRESET;
     while (1) {}
 }
@@ -2465,4 +2504,109 @@ void cmd_poke(void) {
         }
         // the default is the old syntax of:   POKE hiaddr, loaddr, byte
         *(char*)(((int)getinteger(argv[0]) << 16) + (int)getinteger(argv[2])) = (uint8_t)getinteger(argv[4]);
+}
+void fun_json(void) {
+    char* json_string = NULL;
+    const cJSON* root = NULL;
+    void* ptr1 = NULL;
+    char* p;
+    int64_t* dest = NULL;
+    MMFLOAT tempd;
+    int i, j, k, mode, index;
+    char field[32], num[6];
+    getargs(&ep, 3, (unsigned char *)",");
+    char* a = (char *)GetTempMemory(STRINGSIZE);
+    ptr1 = findvar(argv[0], V_FIND | V_EMPTY_OK);
+    if (vartbl[VarIndex].type & T_INT) {
+        if (vartbl[VarIndex].dims[1] != 0) error((char*)"Invalid variable");
+        if (vartbl[VarIndex].dims[0] <= 0) {		// Not an array
+            error((char*)"Argument 1 must be integer array");
+        }
+        dest = (long long int*)ptr1;
+        json_string = (char*)&dest[1];
+    }
+    else error((char*)"Argument 1 must be integer array");
+    cJSON* parse = cJSON_Parse(json_string);
+    if (parse == NULL)error((char*)"Invalid JSON data");
+    root = parse;
+    p = (char*)getCstring(argv[2]);
+    int len = strlen(p);
+    memset(field, 0, 32);
+    memset(num, 0, 6);
+    i = 0; j = 0; k = 0; mode = 0;
+    while (i < len) {
+        if (p[i] == '[') { //start of index
+            mode = 1;
+            field[j] = 0;
+            root = cJSON_GetObjectItemCaseSensitive(root, field);
+            memset(field, 0, 32);
+            j = 0;
+        }
+        if (p[i] == ']') {
+            num[k] = 0;
+            index = atoi(num);
+            root = cJSON_GetArrayItem(root, index);
+            memset(num, 0, 6);
+            k = 0;
+        }
+        if (p[i] == '.') { //new field separator
+            if (mode == 0) {
+                field[j] = 0;
+                root = cJSON_GetObjectItemCaseSensitive(root, field);
+                memset(field, 0, 32);
+                j = 0;
+            }
+            else { //step past the dot after a close bracket
+                mode = 0;
+            }
+        }
+        else {
+            if (mode == 0)field[j++] = p[i];
+            else if (p[i] != '[')num[k++] = p[i];
+        }
+        i++;
+    }
+    root = cJSON_GetObjectItem(root, field);
+
+    if (cJSON_IsObject(root)) {
+        cJSON_Delete(parse);
+        error((char*)"Not an item");
+        return;
+    }
+    if (cJSON_IsInvalid(root)) {
+        cJSON_Delete(parse);
+        error((char*)"Not an item");
+        return;
+    }
+    if (cJSON_IsNumber(root))
+    {
+        tempd = root->valuedouble;
+
+        if ((MMFLOAT)((int64_t)tempd) == tempd) IntToStr(a, (int64_t)tempd, 10);
+        else FloatToStr(a, tempd, 0, STR_AUTO_PRECISION, ' ');   // set the string value to be saved
+        cJSON_Delete(parse);
+        sret = (unsigned char*)a;
+        sret = CtoM(sret);
+        targ = T_STR;
+        return;
+    }
+    if (cJSON_IsBool(root)) {
+        int64_t tempint;
+        tempint = root->valueint;
+        cJSON_Delete(parse);
+        if (tempint)strcpy((char *)sret, "true");
+        else strcpy((char *)sret, "false");
+        sret = CtoM(sret);
+        targ = T_STR;
+        return;
+    }
+    if (cJSON_IsString(root)) {
+        strcpy(a, root->valuestring);
+        cJSON_Delete(parse);
+        sret = (unsigned char*)a;
+        sret = CtoM(sret);
+        targ = T_STR;
+        return;
+    }
+    sret = (unsigned char*)a;
 }

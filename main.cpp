@@ -70,7 +70,7 @@ float MMBasic::MyCustomSynthFunction(int nChannel, float fGlobalTime, float fTim
 {
 	if (CurrentlyPlaying == P_TONE) {
 		if (!SoundPlay) {
-			CloseAudio();
+			CloseAudio(1);
 			WAVcomplete = true;
 		}
 		else {

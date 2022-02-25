@@ -27,6 +27,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "olcPGEX_Sound.h"
 #include "Configuration.h"
 #include <csetjmp>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #pragma warning(disable : 4996)
 #pragma warning(disable : 6011)
 class MMBasic : public olc::PixelGameEngine

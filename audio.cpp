@@ -43,6 +43,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 //#define DR_MP3_NO_SIMD
 #include "dr_mp3.h"
 int PWM_FREQ = 44100;
+#define MAXALBUM 100
+
 unsigned char* WAVInterrupt = NULL;
 volatile int WAVcomplete;
 volatile e_CurrentlyPlaying CurrentlyPlaying = P_NOTHING;
@@ -1017,28 +1019,30 @@ void setnoise(void) {
     return;
 
 }
-extern "C" void CloseAudio(void) {
-    int was_playing = CurrentlyPlaying;
-    CurrentlyPlaying = P_NOTHING;
-    bcount[1] = bcount[2] = wav_filesize = 0;
-    swingbuf = nextbuf = playreadcomplete = 0;
+extern "C" void CloseAudio(int all) {
+	int was_playing = CurrentlyPlaying;
+	CurrentlyPlaying = P_NOTHING;
+	bcount[1] = bcount[2] = wav_filesize = 0;
+	swingbuf = nextbuf = playreadcomplete = 0;
 	bcounte[1] = bcounte[2] = wav_filesize = 0;
 	swingbufe = nextbufe = playreadcompletee = 0;
 	bSynthPlaying = 0;
-//    WAVInterrupt = NULL;
-    if (was_playing == P_MP3 || was_playing == P_PAUSE_MP3)drmp3_uninit(&mymp3);
-    if (was_playing == P_FLAC || was_playing == P_PAUSE_FLAC)FreeMemorySafe((void**)&myflac);
-    ForceFileClose(WAV_fnbr);
-    FreeMemorySafe((void**)&modbuff);
-    FreeMemorySafe((void**)&sbuff1);
-    FreeMemorySafe((void**)&sbuff2);
+	//    WAVInterrupt = NULL;
+	if (was_playing == P_MP3 || was_playing == P_PAUSE_MP3)drmp3_uninit(&mymp3);
+	if (was_playing == P_FLAC || was_playing == P_PAUSE_FLAC)FreeMemorySafe((void**)&myflac);
+	ForceFileClose(WAV_fnbr);
+	FreeMemorySafe((void**)&modbuff);
+	FreeMemorySafe((void**)&sbuff1);
+	FreeMemorySafe((void**)&sbuff2);
 	FreeMemorySafe((void**)&sbuff1e);
 	FreeMemorySafe((void**)&sbuff2e);
 	FreeMemorySafe((void**)&mymp3);
-    FreeMemorySafe((void**)&alist);
-    memset(&mywav, 0, sizeof(drwav));
-    trackstoplay = 0;
-    trackplaying = 0;
+	memset(&mywav, 0, sizeof(drwav));
+	if (all) {
+		FreeMemorySafe((void**)&alist);
+		trackstoplay = 0;
+		trackplaying = 0;
+	}
     SoundPlay = 0;
     ppos = 0;
 	for (int i = 0; i < MAXSOUNDS; i++) {
@@ -1064,7 +1068,7 @@ void wavcallback(char* p) {
 	char filename[STRINGSIZE] = { 0 };
 	fullfilename(p, filename, ".WAV");
     if (CurrentlyPlaying == P_WAV) {
-        CloseAudio();
+        CloseAudio(0);
     }
     WAV_fnbr = FindFreeFileNbr();
     if (!BasicFileOpen(filename, WAV_fnbr, (char*)"rb")) return;
@@ -1108,7 +1112,7 @@ void mp3callback(char* p) {
 	char filename[STRINGSIZE] = { 0 };
 	fullfilename(p, filename, ".MP3");
 	if (CurrentlyPlaying == P_MP3) {
-        CloseAudio();
+        CloseAudio(0);
     }
     WAV_fnbr = FindFreeFileNbr();
     if (!BasicFileOpen(filename, WAV_fnbr, (char *)"rb")) return;
@@ -1141,7 +1145,7 @@ void flaccallback(char* p) {
 	char filename[STRINGSIZE] = { 0 };
 	fullfilename(p, filename, ".FLAC");
 	if (CurrentlyPlaying == P_FLAC) {
-        CloseAudio();
+        CloseAudio(0);
     }
     WAV_fnbr = FindFreeFileNbr();
     if (!BasicFileOpen(filename, WAV_fnbr, (char *)"rb")) return;
@@ -1186,7 +1190,7 @@ void flaccallback(char* p) {
 
 }
 extern "C" void beep(int duration, float freq) {
-	if (!(CurrentlyPlaying == P_NOTHING))CloseAudio();
+	if (!(CurrentlyPlaying == P_NOTHING))CloseAudio(1);
 	SoundPlay = PWM_FREQ * duration / 1000;
 	PhaseM_left = freq / (float)PWM_FREQ * 4096.0f;
 	PhaseM_right = freq / (float)PWM_FREQ * 4096.0f;
@@ -1204,10 +1208,68 @@ extern "C" void beep(int duration, float freq) {
 void cmd_play(void) {
     unsigned char* tp;
     if (checkstring(cmdline, (unsigned char *)"STOP")) {
-        CloseAudio();
+        CloseAudio(1);
         return;
     }
-    if (checkstring(cmdline, (unsigned char*)"PAUSE")) {
+	if (checkstring(cmdline, (unsigned char*)"NEXT")) {
+		if (CurrentlyPlaying == P_MP3) {
+			if (trackplaying == trackstoplay) {
+				if (!CurrentLinePtr)MMPrintString((char *)"Last track is playing\r\n");
+				return;
+			}
+			trackplaying++;
+			mp3callback(alist[trackplaying].fn);
+		}
+		else if (CurrentlyPlaying == P_FLAC) {
+			if (trackplaying == trackstoplay) {
+				if (!CurrentLinePtr)MMPrintString((char*)"Last track is playing\r\n");
+				return;
+			}
+			trackplaying++;
+			flaccallback(alist[trackplaying].fn);
+		}
+		else if (CurrentlyPlaying == P_WAV) {
+			if (trackplaying == trackstoplay) {
+				if (!CurrentLinePtr)MMPrintString((char*)"Last track is playing\r\n");
+				return;
+			}
+			trackplaying++;
+			wavcallback(alist[trackplaying].fn);
+		}
+		else error((char*)"Nothing to play");
+
+		return;
+	}
+	if (checkstring(cmdline, (unsigned char*)"PREVIOUS")) {
+		if (CurrentlyPlaying == P_MP3) {
+			if (trackplaying == 0) {
+				if (!CurrentLinePtr)MMPrintString((char*)"First track is playing\r\n");
+				return;
+			}
+			trackplaying--;
+			mp3callback(alist[trackplaying].fn);
+		}
+		else if (CurrentlyPlaying == P_FLAC) {
+			if (trackplaying == 0) {
+				if (!CurrentLinePtr)MMPrintString((char*)"First track is playing\r\n");
+				return;
+			}
+			trackplaying--;
+			flaccallback(alist[trackplaying].fn);
+		}
+		else if (CurrentlyPlaying == P_WAV) {
+			if (trackplaying == 0) {
+				if (!CurrentLinePtr)MMPrintString((char*)"First track is playing\r\n");
+				return;
+			}
+			trackplaying--;
+			wavcallback(alist[trackplaying].fn);
+		}
+		else error((char*)"Nothing to play");
+
+		return;
+	}
+	if (checkstring(cmdline, (unsigned char*)"PAUSE")) {
         if (CurrentlyPlaying == P_TONE) CurrentlyPlaying = P_PAUSE_TONE;
         else if (CurrentlyPlaying == P_FLAC) CurrentlyPlaying = P_PAUSE_FLAC;
         else if (CurrentlyPlaying == P_SOUND) CurrentlyPlaying = P_PAUSE_SOUND;
@@ -1363,7 +1425,37 @@ void cmd_play(void) {
         if (CurrentlyPlaying != P_NOTHING) error((char*)"Sound output in use");
 
         p = (char *)getCstring(argv[0]);                                    // get the file name
-        WAVInterrupt = NULL;
+		if (!existsfile(p)) {
+			if (!*p)strcpy(p, ".\\");
+			if (dirExists(p)) {
+				WIN32_FIND_DATAA fdFile;
+				HANDLE hFind = NULL;
+				char path[STRINGSIZE] = { 0 };
+				char mask[STRINGSIZE] = { 0 };
+				tidypath(p, path);
+				if (path[strlen(path) - 1] != '\\')strcat(path, "\\");
+				strcpy(mask, path);
+				strcat(mask, "*.mp3");
+				if ((hFind = FindFirstFileA((LPCSTR)mask, &fdFile)) == INVALID_HANDLE_VALUE)return;
+				alist = (a_flist*)GetMemory(sizeof(a_flist) * MAXALBUM);
+				trackstoplay = 0;
+				trackplaying = 0;
+				strcpy(alist[trackstoplay].fn, path);
+				strcat(alist[trackstoplay++].fn, fdFile.cFileName);
+				if (!CurrentLinePtr)MMPrintString(fdFile.cFileName); PRet();
+				while (FindNextFileA(hFind, &fdFile)) {
+					strcpy(alist[trackstoplay].fn, path);
+					strcat(alist[trackstoplay++].fn, fdFile.cFileName);
+					if (!CurrentLinePtr)MMPrintString(fdFile.cFileName); PRet();
+				}
+				trackstoplay--;
+				FindClose(hFind);
+				mp3callback(alist[trackplaying].fn);
+				return;
+			}
+			else error((char*)"File not found");
+		}
+		WAVInterrupt = NULL;
 
         WAVcomplete = 0;
         if (argc == 3) {
@@ -1383,7 +1475,37 @@ void cmd_play(void) {
         if (CurrentlyPlaying != P_NOTHING) error((char*)"Sound output in use");
 
         p = (char*)getCstring(argv[0]);                                    // get the file name
-        WAVInterrupt = NULL;
+		if (!existsfile(p)) {
+			if (!*p)strcpy(p, ".\\");
+			if (dirExists(p)) {
+				WIN32_FIND_DATAA fdFile;
+				HANDLE hFind = NULL;
+				char path[STRINGSIZE] = { 0 };
+				char mask[STRINGSIZE] = { 0 };
+				tidypath(p, path);
+				if (path[strlen(path) - 1] != '\\')strcat(path, "\\");
+				strcpy(mask, path);
+				strcat(mask, "*.flac");
+				if ((hFind = FindFirstFileA((LPCSTR)mask, &fdFile)) == INVALID_HANDLE_VALUE)return;
+				alist = (a_flist*)GetMemory(sizeof(a_flist) * MAXALBUM);
+				trackstoplay = 0;
+				trackplaying = 0;
+				strcpy(alist[trackstoplay].fn, path);
+				strcat(alist[trackstoplay++].fn, fdFile.cFileName);
+				if (!CurrentLinePtr)MMPrintString(fdFile.cFileName); PRet();
+				while (FindNextFileA(hFind, &fdFile)) {
+					strcpy(alist[trackstoplay].fn, path);
+					strcat(alist[trackstoplay++].fn, fdFile.cFileName);
+					if (!CurrentLinePtr)MMPrintString(fdFile.cFileName); PRet();
+				}
+				trackstoplay--;
+				FindClose(hFind);
+				flaccallback(alist[trackplaying].fn);
+				return;
+			}
+			else error((char*)"File not found");
+		}
+		WAVInterrupt = NULL;
 
         WAVcomplete = 0;
         if (argc == 3) {
@@ -1405,8 +1527,37 @@ void cmd_play(void) {
         if (CurrentlyPlaying != P_NOTHING) error((char*)"Sound output in use");
 
         p = (char*)getCstring(argv[0]);                                    // get the file name
+		if (!existsfile(p)) {
+			if (!*p)strcpy(p, ".\\");
+			if (dirExists(p)) {
+				WIN32_FIND_DATAA fdFile;
+				HANDLE hFind = NULL;
+				char path[STRINGSIZE] = { 0 };
+				char mask[STRINGSIZE] = { 0 };
+				tidypath(p, path);
+				if (path[strlen(path) - 1] != '\\')strcat(path, "\\");
+				strcpy(mask, path);
+				strcat(mask, "*.wav");
+				if ((hFind = FindFirstFileA((LPCSTR)mask, &fdFile)) == INVALID_HANDLE_VALUE)return;
+				alist = (a_flist *)GetMemory(sizeof(a_flist) * MAXALBUM);
+				trackstoplay = 0;
+				trackplaying = 0;
+				strcpy(alist[trackstoplay].fn, path);
+				strcat(alist[trackstoplay++].fn, fdFile.cFileName);
+				if (!CurrentLinePtr)MMPrintString(fdFile.cFileName); PRet();
+				while(FindNextFileA(hFind, &fdFile)) {
+					strcpy(alist[trackstoplay].fn, path);
+					strcat(alist[trackstoplay++].fn, fdFile.cFileName);
+					if (!CurrentLinePtr)MMPrintString(fdFile.cFileName); PRet();
+				}
+				trackstoplay--;
+				FindClose(hFind);
+				wavcallback(alist[trackplaying].fn);
+				return;
+			}
+			else error((char*)"File not found");
+		}
         WAVInterrupt = NULL;
-
         WAVcomplete = 0;
         if (argc == 3) {
             WAVInterrupt = GetIntAddress(argv[2]);					// get the interrupt location
@@ -1669,7 +1820,7 @@ extern "C" void checkWAVinput(void) {
             }
             else if (CurrentlyPlaying == P_WAV) {
                 trackplaying++;
-                wavcallback(alist[trackplaying].fn);
+               wavcallback(alist[trackplaying].fn);
             }
         }
     }

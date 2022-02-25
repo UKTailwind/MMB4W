@@ -44,6 +44,10 @@ void cmd_mkdir(void);
 void cmd_rmdir(void);
 void cmd_kill(void);
 void cmd_newedit(void);
+void cmd_system(void);
+void cmd_udp(void);
+void cmd_tcp(void);
+void fun_getip(void);
 #endif
 /**********************************************************************************
  All command tokens tokens (eg, PRINT, FOR, etc) should be inserted in this table
@@ -64,6 +68,9 @@ void cmd_newedit(void);
 { (unsigned char*)"Rmdir",		T_CMD,				0, cmd_rmdir },
 { (unsigned char*)"Kill",		T_CMD,				0, cmd_kill },
 { (unsigned char*)"Edit",   T_CMD,              0, cmd_newedit },
+{ (unsigned char*)"System",   T_CMD,              0, cmd_system },
+{ (unsigned char*)"UDP",   T_CMD,              0, cmd_udp },
+{ (unsigned char*)"TCP",   T_CMD,              0, cmd_tcp },
 
 #endif
 
@@ -79,6 +86,7 @@ void cmd_newedit(void);
 { (unsigned char*)"Lof(",   T_FUN | T_INT,      0, fun_lof },
 { (unsigned char*)"Dir$(",		T_FUN | T_STR,		0, fun_dir },
 { (unsigned char*)"ComPort(",   T_FUN | T_INT,      0, fun_port },
+{ (unsigned char*)"GetIP$(",		T_FUN | T_STR,		0, fun_getip },
 #endif
 #if !defined(INCLUDE_COMMAND_TABLE) && !defined(INCLUDE_TOKEN_TABLE)
 #ifndef FILEIO_H
@@ -151,7 +159,10 @@ extern "C" int64_t filesize(char* fname);
 extern "C" int existsfile(char* fname);
 extern "C" void fullfilename(char* infile, char* outfile, const char * extension);
 extern "C" bool dirExists(const char* dirName_in);
+extern "C" void tidypath(char* p, char* qq);
 extern char lastfileedited[STRINGSIZE];
 extern union uFileTable FileTable[MAXOPENFILES + 1];
+extern int udpopen , tcpopen ;
+
 #endif
 #endif

@@ -102,12 +102,12 @@ extern volatile int swingbuf, nextbuf, playreadcomplete;
 extern volatile int swingbufe, nextbufe, playreadcompletee;
 extern volatile int mono;
 extern volatile int audiorepeat;
-extern "C" void CloseAudio(void);
+extern "C" void CloseAudio(int all);
 extern "C" void beep(int duration, float freq);
 typedef struct sa_flist {
-    char fn[255];
+    char fn[STRINGSIZE];
 } a_flist;
-
+extern sa_flist* alist;
 #endif
 #endif
 

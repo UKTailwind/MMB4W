@@ -417,6 +417,7 @@ extern "C" void IntToStrPad(char* p, long long int nbr, signed char padch, int m
 
 // print a string to the console interfaces
 extern "C" void MMPrintString(char* s) {
+    if (s == NULL)return;
     while (*s) {
         MMputchar(*s);
         s++;
@@ -2633,6 +2634,8 @@ void  ClearStack(void) {
 
 extern "C" void ClearRuntime(void) {
     int i;
+    udpopen = 0;
+    tcpopen = 0;
     optionangle = 1.0;
     optiony = 0;
     ConsoleRepeat = 0;
@@ -2669,7 +2672,7 @@ extern "C" void ClearRuntime(void) {
     }
     SerialCloseAll();
     closeallsprites();
-    CloseAudio();
+    CloseAudio(1);
     keyselect = 0;
     ResetGUI();
 }
