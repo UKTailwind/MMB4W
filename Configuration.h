@@ -31,11 +31,11 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #define BREAK_KEY 3
 #define MMFLOAT double
 #define TFLOAT double
-#define MAXFORLOOPS         20                      // each entry uses 17 bytes
-#define MAXDOLOOPS          20                      // each entry uses 12 bytes
+#define MAXFORLOOPS         128                      // each entry uses 17 bytes
+#define MAXDOLOOPS          128                      // each entry uses 12 bytes
 #define MAXGOSUB            50                     // each entry uses 4 bytes
-#define MAX_MULTILINE_IF    20                      // each entry uses 8 bytes
-#define MAXTEMPSTRINGS      64                      // each entry takes up 4 bytes
+#define MAX_MULTILINE_IF    128                      // each entry uses 8 bytes
+#define MAXTEMPSTRINGS      128                      // each entry takes up 4 bytes
 #define MAXSUBFUN           512               // each entry takes up 4 bytes
 #define MAXSUBHASH          MAXSUBFUN
 // operating characteristics
@@ -59,7 +59,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #define CURSOR_ON			650                  // cursor on time in mS
 #define FNV_prime           16777619
 #define FNV_offset_basis    2166136261
-#define MAXVARS             1024                     // 8 + MAXVARLEN + MAXDIM * 2  (ie, 56 bytes) - these do not incl array members
+#define MAXVARS             2048                     // 8 + MAXVARLEN + MAXDIM * 2  (ie, 56 bytes) - these do not incl array members
 #define MAXVARHASH				MAXVARS/2
 #define CONFIG_TITLE		0
 #define CONFIG_LOWER		1

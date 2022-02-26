@@ -41,3 +41,5 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "sprites.h"
 #include "upng.h"
 #include "audio.h"
+#include "turtle.h"
+

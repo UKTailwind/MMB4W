@@ -2634,6 +2634,9 @@ void  ClearStack(void) {
 
 extern "C" void ClearRuntime(void) {
     int i;
+    turtle_init_not_done = 1;
+    main_turtle_polyX = NULL;
+    main_turtle_polyY = NULL;
     lasttimer = -1;
     udpopen = 0;
     tcpopen = 0;

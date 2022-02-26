@@ -58,7 +58,7 @@ const int xres[MAXMODES + 1] =         { 0,800,640,320,480,240,256,320,640,1024,
 const int yres[MAXMODES + 1] =         { 0,600,400,200,432,216,240,240,480,768,480,720,540,300,540,1024,1080,240,600};
 const int pixeldensity[MAXMODES + 1] = { 0,  1,  1,  3,  2,  4,  4,  3,  1,  1,  1,  1,  1,  2,  2,  1 ,   1,  3,  1};
 const int defaultfont[MAXMODES + 1] = { 0,1,1,1,1,1,1,1,1,(2 << 4) | 1 ,1 ,(2 << 4) | 1 , (3 << 4) | 1 ,1,1,(2 << 4) | 1 ,(2 << 4) | 1 ,1,(3 << 4) | 1 };
-typedef struct {
+ typedef struct {
     unsigned char red;
     unsigned char green;
     unsigned char blue;
@@ -1847,6 +1847,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         ARGBenabled = 0;
         WritePage = 0;
         ReadPage = 0;
+        FreeMemorySafe((void**)&main_turtle_polyX);
+        FreeMemorySafe((void**)&main_turtle_polyY);
         if (PageTable[WPN].address != NULL) {
             FreeMemorySafe((void**)&PageTable[BPN].address);
             FreeMemorySafe((void**)&PageTable[WPN].address);

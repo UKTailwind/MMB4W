@@ -2017,6 +2017,8 @@ void cmd_newedit(void) {
 	ClearVars(0);
 	closeallsprites();
 	closeall3d();
+	FreeMemorySafe((void**)&main_turtle_polyX);
+	FreeMemorySafe((void**)&main_turtle_polyY);
 	if (!(*cmdline == 0 || *cmdline == '\'')) {
 		fullfilename((char*)getCstring(cmdline), q, NULL);
 		if (strchr(q, '.') == NULL) {

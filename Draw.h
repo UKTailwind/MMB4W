@@ -54,6 +54,7 @@ void cmd_page(void);
 void cmd_framebuffer(void);
 void cmd_image(void);
 void cmd_3D(void);
+void cmd_turtle(void);
 
 void fun_rgb(void);
 void fun_mmhres(void);
@@ -101,7 +102,7 @@ void fun_3D(void);
 { (unsigned char*)"FrameBuffer",	T_CMD,						0, cmd_framebuffer },
 { (unsigned char*)"Image",	 		T_CMD,						0, cmd_image },
 { (unsigned char*)"Draw3D",         T_CMD,                      0, cmd_3D },
-
+{ (unsigned char*)"Turtle",			T_CMD,						0, cmd_turtle },
 #endif
 
 
