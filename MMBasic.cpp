@@ -2634,6 +2634,7 @@ void  ClearStack(void) {
 
 extern "C" void ClearRuntime(void) {
     int i;
+    lasttimer = -1;
     udpopen = 0;
     tcpopen = 0;
     optionangle = 1.0;

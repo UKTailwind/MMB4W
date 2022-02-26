@@ -51,6 +51,7 @@ unsigned char* OnKeyGOSUB = NULL;
 int64_t fasttimerat0;
 MMFLOAT optionangle = 1.0;
 int optiony = 0;
+int64_t lasttimer = -1;
 
 int ConsoleRepeat = 0;
 #define EPOCH_ADJUSTMENT_DAYS	719468L
@@ -148,15 +149,31 @@ extern "C" void PFlt(MMFLOAT flt) {
 extern "C" void PFltComma(MMFLOAT n) {
     MMPrintString((char*)", "); PFlt(n);
 }
+#define ticks_per_millisecond ((frequency*1000)/1000000)
+
 extern "C" int check_interrupt(void) {
     unsigned char* intaddr;
     static unsigned char rti[2];
+    int64_t fasttimer;
+    bool msecelapsed = false;
+    QueryPerformanceCounter((LARGE_INTEGER*)&fasttimer);
+    if(lasttimer == -1)QueryPerformanceCounter((LARGE_INTEGER*)&lasttimer);
+    if (fasttimer - lasttimer > ticks_per_millisecond) {
+        msecelapsed = true;
+        lasttimer += ticks_per_millisecond;
+    }
+    if (msecelapsed) {
+        for (int i = 0; i < NBRSETTICKS; i++) if (TickActive[i])TickTimer[i]++;			// used in the interrupt tick
+        msecelapsed = false;
+    }
+
     ProcessTouch();                                             // check GUI touch
     if (CheckGuiFlag) CheckGui();                                // This implements a LED flash
     if (!InterruptUsed) return 0;                                    // quick exit if there are no interrupts set
     if (InterruptReturn != NULL || CurrentLinePtr == NULL) return 0; // skip if we are in an interrupt or in immediate mode
     // check if one of the tick interrupts is enabled and if it has occured
     // check for an  ON KEY loc  interrupt
+ 
     if (KeyInterrupt != NULL && Keycomplete) {
         Keycomplete = false;
         intaddr = KeyInterrupt;									    // set the next stmt to the interrupt location
@@ -166,14 +183,6 @@ extern "C" int check_interrupt(void) {
     if (OnKeyGOSUB && kbhitConsole()) {
         intaddr = OnKeyGOSUB;                                       // set the next stmt to the interrupt location
         goto GotAnInterrupt;
-    }
-    for (int i = 0; i < NBRSETTICKS; i++) {
-        if (TickInt[i] != NULL && TickTimer[i] > TickPeriod[i]) {
-            // reset for the next tick but skip any ticks completely missed
-            while (TickTimer[i] > TickPeriod[i]) TickTimer[i] -= TickPeriod[i];
-            intaddr = TickInt[i];
-            goto GotAnInterrupt;
-        }
     }
     if (MouseInterrupLeftDown != NULL && MouseFoundLeftDown) {
         MouseFoundLeftDown = 0;
@@ -214,6 +223,14 @@ extern "C" int check_interrupt(void) {
         CollisionFound = false;
         intaddr = (unsigned char *)COLLISIONInterrupt;									    // set the next stmt to the interrupt location
         goto GotAnInterrupt;
+    }
+    for (int i = 0; i < NBRSETTICKS; i++) {
+        if (TickInt[i] != NULL && TickTimer[i] > TickPeriod[i]) {
+            // reset for the next tick but skip any ticks completely missed
+            while (TickTimer[i] > TickPeriod[i]) TickTimer[i] -= TickPeriod[i];
+            intaddr = TickInt[i];
+            goto GotAnInterrupt;
+        }
     }
     if (comused) {
         for (int i = 1; i < MAXCOMPORTS; i++) {
@@ -421,56 +438,6 @@ void cmd_cfunction(void) {
         p++;
     }
 }
-void cmd_pause(void) {
-    static int interrupted = false;
-    MMFLOAT f;
-
-    f = getnumber(cmdline);                                         // get the pulse width
-    if (f < 0) error((char *)"Number out of bounds");
-    if (f < 0.05) return;
-
-    if (f < 1.5) {
-        uSec((int)f * 1000);                                             // if less than 1.5mS do the pause right now
-        return;                                                     // and exit straight away
-    }
-
-    //    #if defined(MX470)
-    //      InPause = true;
-    //    #endif
-
-    if (InterruptReturn == NULL) {
-        // we are running pause in a normal program
-        // first check if we have reentered (from an interrupt) and only zero the timer if we have NOT been interrupted.
-        // This means an interrupted pause will resume from where it was when interrupted
-        if (!interrupted) PauseTimer = 0;
-        interrupted = false;
-
-        while (PauseTimer < (unsigned int)FloatToInt32(f)) {
-            CheckAbort();
-            if (check_interrupt()) {
-                // if there is an interrupt fake the return point to the start of this stmt
-                // and return immediately to the program processor so that it can send us off
-                // to the interrupt routine.  When the interrupt routine finishes we should reexecute
-                // this stmt and because the variable interrupted is static we can see that we need to
-                // resume pausing rather than start a new pause time.
-                while (*cmdline && *cmdline != cmdtoken) cmdline--;  // step back to find the command token
-                InterruptReturn = cmdline;                          // point to it
-                interrupted = true;                                 // show that this stmt was interrupted
-                return;                                             // and let the interrupt run
-            }
-        }
-        interrupted = false;
-    }
-    else {
-        // we are running pause in an interrupt, this is much simpler but note that
-        // we use a different timer from the main pause code (above)
-        IntPauseTimer = 0;
-        while (IntPauseTimer < (unsigned int)FloatToInt32(f)) CheckAbort();
-    }
-    //    #if defined(MX470)
-    //      InPause = false;
-    //    #endif
-}
 
 void cmd_font(void) {
     getargs(&cmdline, 3, (unsigned char*)",");
@@ -497,6 +464,75 @@ void cmd_timer(void) {
     QueryPerformanceCounter((LARGE_INTEGER*)&fasttimerat0);
     fasttimerat0 -= getinteger(++cmdline)/1000 * frequency;
 }
+void fun_timer(void) {
+    int64_t i;
+    QueryPerformanceCounter((LARGE_INTEGER*)&i);
+    i -= fasttimerat0;
+    fret = (MMFLOAT)i / (MMFLOAT)(frequency / 1000.0);
+    targ = T_NBR;
+}
+extern "C" void uSec(int t) {
+    int64_t i, j;
+    QueryPerformanceCounter((LARGE_INTEGER*)&i);
+    while (1) {
+        QueryPerformanceCounter((LARGE_INTEGER*)&j);
+        if ((j - i) > t * frequency / 1000000)break;
+    }
+}
+void cmd_pause(void) {
+    static int interrupted = false;
+    MMFLOAT f;
+    static int64_t i, j;
+
+    f = getnumber(cmdline);                                         // get the pulse width
+    if (f < 0) error((char*)"Number out of bounds");
+
+    if (f < 0.1) {
+        uSec((int)(f * 1000));                                             // if less than 1.5mS do the pause right now
+        return;                                                     // and exit straight away
+    }
+
+
+    if (InterruptReturn == NULL) {
+        // we are running pause in a normal program
+        // first check if we have reentered (from an interrupt) and only zero the timer if we have NOT been interrupted.
+        // This means an interrupted pause will resume from where it was when interrupted
+        if (!interrupted) {
+            QueryPerformanceCounter((LARGE_INTEGER*)&i);
+        }
+        interrupted = false;
+
+        while (1) {
+            CheckAbort();
+            if (check_interrupt()) {
+                // if there is an interrupt fake the return point to the start of this stmt
+                // and return immediately to the program processor so that it can send us off
+                // to the interrupt routine.  When the interrupt routine finishes we should reexecute
+                // this stmt and because the variable interrupted is static we can see that we need to
+                // resume pausing rather than start a new pause time.
+                while (*cmdline && *cmdline != cmdtoken) cmdline--;  // step back to find the command token
+                InterruptReturn = cmdline;                          // point to it
+                interrupted = true;                                 // show that this stmt was interrupted
+                return;                                             // and let the interrupt run
+            }
+            QueryPerformanceCounter((LARGE_INTEGER*)&j);
+            if ((j - i) > int64_t(f * (MMFLOAT)frequency / 1000.0))break;
+
+        }
+        interrupted = false;
+
+    }
+    else {
+        // we are running pause in an interrupt, this is much simpler but note that
+        // we use a different timer from the main pause code (above)
+        while (1) {
+            CheckAbort();
+            QueryPerformanceCounter((LARGE_INTEGER*)&j);
+            if ((j - i) > int64_t(f * (MMFLOAT)frequency / 1000.0))break;
+        }
+    }
+}
+
 void cmd_restart(void) {
     _excep_code = RESTART_NOAUTORUN;
     SoftReset();
@@ -521,13 +557,6 @@ void cmd_watchdog(void) {
 
 
 // this is invoked as a function
-void fun_timer(void) {
-    int64_t i;
-    QueryPerformanceCounter((LARGE_INTEGER*)&i);
-    i -= fasttimerat0;
-    fret = (MMFLOAT)i / (MMFLOAT)(frequency / 1000.0);
-    targ = T_NBR;
-}
 extern "C" void PO(const char* s, int m) {
     if (m == 1)MMPrintString((char*)"OPTION ");
     else if (m == 2)MMPrintString((char*)"DEFAULT ");

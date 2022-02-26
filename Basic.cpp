@@ -51,8 +51,8 @@ volatile int64_t startfasttime;
 volatile int64_t fasttime;
 volatile unsigned int WDTimer = 0;
 volatile unsigned int SecondsTimer = 0;
-volatile unsigned int PauseTimer = 0; 
-volatile unsigned int IntPauseTimer = 0;
+//volatile unsigned int PauseTimer = 0; 
+//volatile unsigned int IntPauseTimer = 0;
 volatile long long int mSecTimer =0; 
 volatile unsigned int AHRSTimer = 0;
 volatile unsigned int MouseTimer = 0;
@@ -450,11 +450,6 @@ saveline:
     MMPrintString((char*)"\r\n");
 }
 
-extern "C" void uSec(int t) {
-    auto when_started = clock_type::now();
-    auto target_time = when_started + std::chrono::microseconds(t); 
-    std::this_thread::sleep_until(target_time);
-}
 void MouseProc(void) {
     static int lastl = 0, lastr=0, lastxclick = 0, lastyclick = 0;
     TOUCH_DOWN = mouse_left;
@@ -495,8 +490,8 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     strcpy(lastfileedited, Option.lastfilename);
     WDTimer = 0;
     SecondsTimer = 0;
-    PauseTimer = 0;
-    IntPauseTimer = 0;
+//    PauseTimer = 0;
+//    IntPauseTimer = 0;
     mSecTimer = 0;
     AHRSTimer = 0;
     MouseTimer = 0;
@@ -689,7 +684,7 @@ DWORD WINAPI mClock(LPVOID lpParameter)
 		std::this_thread::sleep_until(target_time);
 		target_time += 1ms;
         if(++CursorTimer > CURSOR_OFF + CURSOR_ON) CursorTimer = 0;		// used to control cursor blink rate
-        PauseTimer++;                                                     // used by the PAUSE command
+//        PauseTimer++;                                                     // used by the PAUSE command
         mSecTimer++; 
         AHRSTimer++;
         MouseTimer++;
@@ -708,10 +703,7 @@ DWORD WINAPI mClock(LPVOID lpParameter)
         }
 
         if (MouseProcTimer % 20 == 0)MouseProc();
-        if (InterruptUsed) {
-            int i;
-            for (i = 0; i < NBRSETTICKS; i++) if (TickActive[i])TickTimer[i]++;			// used in the interrupt tick
-        }
+
         if (TOUCH_DOWN) {                                            // is the pen down
             if (!TouchState) {                                       // yes, it is.  If we have not reported this before
                 TouchState = TouchDown = true;                      // set the flags

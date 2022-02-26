@@ -2091,7 +2091,6 @@ void fun_getip(void) {
     {
         //Return the first one;
         strcpy(ip, inet_ntoa(*addr_list[i]));
-        MMPrintString(ip); PRet();
         break;
     }
 

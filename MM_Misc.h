@@ -155,6 +155,6 @@ extern int VideoMode;
 extern int ConsoleRepeat;
 extern MMFLOAT optionangle;
 extern int optiony;
-
+extern int64_t lasttimer;
 
 #endif
