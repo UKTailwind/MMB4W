@@ -199,7 +199,7 @@ extern int64_t gui_fcolour , gui_bcolour ;
 extern int gui_font_width, gui_font_height;
 extern int PrintPixelMode;
 extern int gui_font;
-extern  unsigned char* FontTable[];
+extern  volatile unsigned char* FontTable[];
 extern const int xres[] ;
 extern const int yres[] ;
 extern const int pixeldensity[] ;

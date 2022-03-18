@@ -754,7 +754,7 @@ void cmd_gui(void) {
         getargs(&p, 1, (unsigned char*)",");
         int bl = 500;
         if (argc == 1)bl = (int)getint(p, 1, INT_MAX);
-        beep(bl,650.0f);
+        if(!noaudio)beep(bl,650.0f);
         return;
     }
 

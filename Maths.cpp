@@ -28,11 +28,12 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "MainThread.h"
 #include "MMBasic_Includes.h"
 #include <complex>
+#include <valarray>
+
 #pragma warning(disable : 6011)
 MMFLOAT PI;
 using namespace std;
 typedef std::complex<double> cplx;
-#define I (cplx)1.0
 void cmd_FFT(unsigned char* pp);
 const double chitable[51][15] = {
 		{0.995,0.99,0.975,0.95,0.9,0.5,0.2,0.1,0.05,0.025,0.02,0.01,0.005,0.002,0.001},
@@ -2121,69 +2122,81 @@ void fun_math(void) {
 	}
 	error((char *)"Syntax");
 }
-
-static size_t reverse_bits(size_t val, int width) {
-	size_t result = 0;
-	for (int i = 0; i < width; i++, val >>= 1)
-		result = (result << 1) | (val & 1U);
-	return result;
-}
-
-bool Fft_transformRadix2(cplx vec[], size_t n, bool inverse) {
-	// Length variables
-	int levels = 0;  // Compute levels = floor(log2(n))
-	for (size_t temp = (size_t)n; temp > 1U; temp >>= 1)
-		levels++;
-	if ((size_t)1U << levels != (int)n)
-		return false;  // n is not a power of 2
-
-	// Trigonometric tables
-	if (SIZE_MAX / sizeof(cplx) < n / 2)
-		return false;
-	cplx* exptable = (cplx *)GetMemory((n / 2) * sizeof(cplx));
-	if (exptable == NULL)
-		return false;
-	for (size_t i = 0; i < n / 2; i++)
-		exptable[i] = std::exp((inverse ? 2 : -2) * M_PI * i / n * I);
-
-	// Bit-reversed addressing permutation
-	for (size_t i = 0; i < n; i++) {
-		size_t j = reverse_bits(i, levels);
-		if (j > i) {
-			cplx temp = vec[i];
-			vec[i] = vec[j];
-			vec[j] = temp;
-		}
-	}
-
-	// Cooley-Tukey decimation-in-time radix-2 FFT
-	for (size_t size = 2; size <= n; size *= 2) {
-		size_t halfsize = size / 2;
-		size_t tablestep = n / size;
-		for (size_t i = 0; i < n; i += size) {
-			for (size_t j = i, k = 0; j < i + halfsize; j++, k += tablestep) {
-				size_t l = j + halfsize;
-				cplx temp = vec[l] * exptable[k];
-				vec[l] = vec[j] - temp;
-				vec[j] += temp;
+typedef std::complex<double> Complex;
+typedef std::valarray<Complex> CArray;
+// Cooley-Tukey FFT (in-place, breadth-first, decimation-in-frequency)
+// Better optimized but less intuitive
+// !!! Warning : in some cases this code make result different from not optimased version above (need to fix bug)
+// The bug is now fixed @2017/05/30 
+void fft(CArray& x)
+{
+	// DFT
+	unsigned int N = x.size(), k = N, n;
+	double thetaT = 3.14159265358979323846264338328L / N;
+	Complex phiT = Complex(cos(thetaT), -sin(thetaT)), T;
+	while (k > 1)
+	{
+		n = k;
+		k >>= 1;
+		phiT = phiT * phiT;
+		T = 1.0L;
+		for (unsigned int l = 0; l < k; l++)
+		{
+			for (unsigned int a = l; a < N; a += n)
+			{
+				unsigned int b = a + k;
+				Complex t = x[a] - x[b];
+				x[a] += x[b];
+				x[b] = t * T;
 			}
+			T *= phiT;
 		}
-		if (size == n)  // Prevent overflow in 'size *= 2'
-			break;
 	}
-
-	FreeMemory((unsigned char*)exptable);
-	return true;
+	// Decimate
+	unsigned int m = (unsigned int)log2(N);
+	for (unsigned int a = 0; a < N; a++)
+	{
+		unsigned int b = a;
+		// Reverse bits
+		b = (((b & 0xaaaaaaaa) >> 1) | ((b & 0x55555555) << 1));
+		b = (((b & 0xcccccccc) >> 2) | ((b & 0x33333333) << 2));
+		b = (((b & 0xf0f0f0f0) >> 4) | ((b & 0x0f0f0f0f) << 4));
+		b = (((b & 0xff00ff00) >> 8) | ((b & 0x00ff00ff) << 8));
+		b = ((b >> 16) | (b << 16)) >> (32 - m);
+		if (b > a)
+		{
+			Complex t = x[a];
+			x[a] = x[b];
+			x[b] = t;
+		}
+	}
+	//// Normalize (This section make it not working correctly)
+	//Complex f = 1.0 / sqrt(N);
+	//for (unsigned int i = 0; i < N; i++)
+	//	x[i] *= f;
 }
 
+void ifft(CArray& x)
+{
+	// conjugate the complex numbers
+	x = x.apply(std::conj);
 
+	// forward fft
+	fft(x);
+
+	// conjugate the complex numbers again
+	x = x.apply(std::conj);
+
+	// scale the numbers
+	x /= x.size();
+}
 void cmd_FFT(unsigned char* pp) {
 	void* ptr1 = NULL;
 	void* ptr2 = NULL;
 	unsigned char* tp;
 	PI = atan2(1, 1) * 4;
 	cplx* a1cplx = NULL, * a2cplx = NULL;
-	MMFLOAT* a3float = NULL, * a4float = NULL, * a5float;
+	MMFLOAT* a3float = NULL, * a4float = NULL;
 	int i, size, powerof2 = 0;
 	tp = checkstring(pp, (unsigned char*)"MAGNITUDE");
 	if (tp) {
@@ -2215,11 +2228,12 @@ void cmd_FFT(unsigned char* pp) {
 		}
 		if (!powerof2)error((char *)"array size must be a power of 2");
 		a1cplx = (cplx*)GetTempMemory((size + 1) * 16);
-		a5float = (MMFLOAT*)a1cplx;
-		for (i = 0; i <= size; i++) { a5float[i * 2] = a3float[i]; a5float[i * 2 + 1] = 0; }
-		Fft_transformRadix2(a1cplx, size + 1, 0);
-		//	    fft((MMFLOAT *)a1cplx,size+1);
-		for (i = 0; i <= size; i++)a4float[i] = std::abs(a1cplx[i]);
+		for (i = 0; i <= size; i++) { 
+			a1cplx[i] = (cplx)(a3float[i]);
+		}
+		CArray data(a1cplx, size+1);
+		fft(data);
+		for (i = 0; i <= size; i++)a4float[i] = std::abs(data[i]);
 		return;
 	}
 	tp = checkstring(pp, (unsigned char*)"PHASE");
@@ -2252,11 +2266,12 @@ void cmd_FFT(unsigned char* pp) {
 		}
 		if (!powerof2)error((char *)"array size must be a power of 2");
 		a1cplx = (cplx*)GetTempMemory((size + 1) * 16);
-		a5float = (MMFLOAT*)a1cplx;
-		for (i = 0; i <= size; i++) { a5float[i * 2] = a3float[i]; a5float[i * 2 + 1] = 0; }
-		Fft_transformRadix2(a1cplx, size + 1, 0);
-		//	    fft((MMFLOAT *)a1cplx,size+1);
-		for (i = 0; i <= size; i++)a4float[i] = std::arg(a1cplx[i]);
+		for (i = 0; i <= size; i++) {
+			a1cplx[i] = (cplx)(a3float[i]);
+		}
+		CArray data(a1cplx, size + 1);
+		fft(data);
+		for (i = 0; i <= size; i++)a4float[i] = std::arg(data[i]);
 		return;
 	}
 	tp = checkstring(pp, (unsigned char*)"INVERSE");
@@ -2280,7 +2295,7 @@ void cmd_FFT(unsigned char* pp) {
 			if (vartbl[VarIndex].dims[0] <= 0) {		// Not an array
 				error((char *)"Argument 2 must be a floating point array");
 			}
-			a3float = (MMFLOAT*)ptr2;
+			a4float = (MMFLOAT*)ptr2;
 			if ((uint32_t)ptr2 != (uint32_t)vartbl[VarIndex].val.s)error((char *)"Syntax");
 		}
 		else error((char *)"Argument 2 must be a floating point array");
@@ -2289,13 +2304,9 @@ void cmd_FFT(unsigned char* pp) {
 			if (size == i - 1)powerof2 = 1;
 		}
 		if (!powerof2)error((char *)"array size must be a power of 2");
-		a2cplx = (cplx*)GetTempMemory((size + 1) * 16);
-		memcpy(a2cplx, a1cplx, (size + 1) * 16);
-		for (i = 0; i <= size; i++)a2cplx[i] = conj(a2cplx[i]);
-		Fft_transformRadix2(a2cplx, size + 1, 0);
-		//	    fft((MMFLOAT *)a2cplx,size+1);
-		for (i = 0; i <= size; i++)a2cplx[i] = conj(a2cplx[i]) / (cplx)(size + 1);
-		for (i = 0; i <= size; i++)a3float[i] = std::real(a2cplx[i]);
+		CArray data(a1cplx, size + 1);
+		ifft(data);
+		for (i = 0; i <= size; i++)a4float[i] = std::real(data[i]);
 		return;
 	}
 	getargs(&pp, 3, (unsigned char *)",");
@@ -2317,7 +2328,7 @@ void cmd_FFT(unsigned char* pp) {
 		if (vartbl[VarIndex].dims[0] - OptionBase != 1) {		// Not an array
 			error((char *)"Argument 2 must be a 2D floating point array");
 		}
-		a2cplx = (cplx*)ptr2;
+		a4float = (MMFLOAT*)ptr2;
 		if ((uint32_t)ptr2 != (uint32_t)vartbl[VarIndex].val.s)error((char *)"Syntax");
 	}
 	else error((char *)"Argument 2 must be a 2D floating point array");
@@ -2326,10 +2337,13 @@ void cmd_FFT(unsigned char* pp) {
 		if (size == i - 1)powerof2 = 1;
 	}
 	if (!powerof2)error((char *)"array size must be a power of 2");
-	a4float = (MMFLOAT*)a2cplx;
-	for (i = 0; i <= size; i++) { a4float[i * 2] = a3float[i]; a4float[i * 2 + 1] = 0; }
-	//    fft((MMFLOAT *)a2cplx,size+1);
-	Fft_transformRadix2(a2cplx, size + 1, 0);
+	a1cplx = (cplx*)GetTempMemory((size + 1) * 16);
+	for (i = 0; i <= size; i++) {
+		a1cplx[i] = (cplx)(a3float[i]);
+	}
+	CArray data(a1cplx, size + 1);
+	fft(data);
+	for (i = 0; i <= size; i++) { a4float[i * 2] = real(data[i]); a4float[i * 2 + 1] = imag(data[i]); }
 }
 void cmd_SensorFusion(char* passcmdline) {
 	unsigned char* p;

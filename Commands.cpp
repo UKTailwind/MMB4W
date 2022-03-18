@@ -61,10 +61,11 @@ unsigned char DimUsed = false;						// used to catch OPTION BASE after DIM has b
 int TraceOn;                                // used to track the state of TRON/TROFF
 unsigned char* TraceBuff[TRACE_BUFF_SIZE];
 int TraceBuffIndex;                       // used for listing the contents of the trace buffer
-int OptionErrorSkip;                                               // how to handle an error
-int MMerrno;                                                        // the error number
-int ListCnt;
-
+int OptionErrorSkip=0;                                               // how to handle an error
+int MMerrno=0;                                                        // the error number
+int ListCnt; 
+sa_data datastore[MAXRESTORE];
+int restorepointer = 0;
 const unsigned int CaseOption = 0xffffffff;	// used to store the case of the listed output
 
 void cmd_null(void) {
@@ -118,7 +119,7 @@ void cmd_quit(void) {
 	SystemMode = MODE_QUIT;
 }
 void cmd_inc(void) {
-	unsigned char* p;
+	unsigned char* p, *q;
 	int vtype;
 	getargs(&cmdline, 3, (unsigned char *)",");
 	if(argc == 1) {
@@ -136,7 +137,9 @@ void cmd_inc(void) {
 		if(vartbl[VarIndex].type & T_CONST) error((char *)"Cannot change a constant");
 		vtype = TypeMask(vartbl[VarIndex].type);
 		if(vtype & T_STR) {
-			Mstrcat(p, getstring(argv[2]));
+			q = getstring(argv[2]);
+			if (*p + *q > MAXSTRLEN) error((char*)"String too long");
+			Mstrcat(p, q);
 		}
 		else if(vtype & T_NBR) {
 			(*(MMFLOAT*)p) = (*(MMFLOAT*)p) + getnumber(argv[2]);
@@ -520,7 +523,7 @@ void cmd_list(void) {
 			char* buff = (char *)GetTempMemory(STRINGSIZE);
 			strcpy(buff, (const char *)getCstring(argv[0]));
 			if(strchr(buff, '.') == NULL) strcat(buff, ".BAS");
-			ListFile(buff, true);
+			ListProgram((unsigned char*)buff, true);
 		}
 		else {
 			ListProgram(NULL, true);
@@ -583,7 +586,7 @@ void cmd_list(void) {
 			else if(m == CommandTableSize + 2)strcpy(c[m], "End If");
 			else if(m == CommandTableSize + 3)strcpy(c[m], "Exit Do");
 			else strcpy(c[m], "Cat");
-			m++;
+			if(strcasecmp(c[m],"CSub")!=0  && strcasecmp(c[m], "End CSub") != 0)m++;
 		}
 		sortStrings(c, m);
 		for (i = 1; i < m; i += step) {
@@ -632,7 +635,7 @@ void cmd_list(void) {
 			char* buff = (char *)GetTempMemory(STRINGSIZE);
 			strcpy(buff, (const char*)getCstring(argv[0]));
 			if(strchr(buff, '.') == NULL) strcat(buff, ".BAS");
-			ListFile(buff, false);
+			ListProgram((unsigned char*)buff, false);
 		}
 		else {
 			ListProgram(NULL, false);
@@ -1638,14 +1641,15 @@ void cmd_exit(void) {
 
 
 void cmd_error(void) {
-	unsigned char* s;
-	if(*cmdline && *cmdline != '\'') {
-		s = getCstring(cmdline);
-		CurrentLinePtr = NULL;                                      // suppress printing the line that caused the issue
-		error((char *)s);
+	char* s, p[STRINGSIZE];
+	if (*cmdline && *cmdline != '\'') {
+		s = (char *)getCstring(cmdline);
+
+		strcpy(p, s);
+		error(p);
 	}
 	else
-		error((char*)"");
+		error((char *)"");
 }
 
 
@@ -1754,13 +1758,17 @@ void cmd_read(void) {
 	unsigned char *p, datatoken, *lineptr = NULL, *ptr;
 	int vcnt, vidx, num_to_read = 0;
 	if (checkstring(cmdline, (unsigned char*)"SAVE")) {
-		SaveNextDataLine = NextDataLine;
-		SaveNextData = NextData;
+		if(restorepointer== MAXRESTORE - 1)error((char*)"Too many saves");
+		datastore[restorepointer].SaveNextDataLine = NextDataLine;
+		datastore[restorepointer].SaveNextData = NextData;
+		restorepointer++;
 		return;
 	}
 	if (checkstring(cmdline, (unsigned char*)"RESTORE")) {
-		NextDataLine = SaveNextDataLine;
-		NextData = SaveNextData;
+		if (!restorepointer)error((char*)"Nothing to restore");
+		restorepointer--;
+		NextDataLine = datastore[restorepointer].SaveNextDataLine;
+		NextData = datastore[restorepointer].SaveNextData;
 		return;
 	}
 

@@ -30,6 +30,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "hxcmod.h"
 #include <userenv.h>
 #include "cJSON.h"
+#include <chrono>
+
 extern char* editCbuff;
 extern modcontext mcontext;
 
@@ -52,7 +54,7 @@ int64_t fasttimerat0;
 MMFLOAT optionangle = 1.0;
 int optiony = 0;
 int64_t lasttimer = -1;
-
+bool OptionConsoleSerial = false;
 int ConsoleRepeat = 0;
 #define EPOCH_ADJUSTMENT_DAYS	719468L
 /* year to which the adjustment was made */
@@ -95,6 +97,65 @@ leap_days(int y1, int y2)
     --y1;
     --y2;
     return (y2 / 4 - y1 / 4) - (y2 / 100 - y1 / 100) + (y2 / 400 - y1 / 400);
+}
+struct tm*
+    gmtime_r(const time_t* __restrict tim_p,
+        struct tm* __restrict res)
+{
+    long days, rem;
+    const time_t lcltime = *tim_p;
+    int era, weekday, year;
+    unsigned erayear, yearday, month, day;
+    unsigned long eraday;
+
+    days = (long)lcltime / SECSPERDAY + EPOCH_ADJUSTMENT_DAYS;
+    rem = lcltime % SECSPERDAY;
+    if (rem < 0)
+    {
+        rem += SECSPERDAY;
+        --days;
+    }
+
+    /* compute hour, min, and sec */
+    res->tm_hour = (int)(rem / SECSPERHOUR);
+    rem %= SECSPERHOUR;
+    res->tm_min = (int)(rem / SECSPERMIN);
+    res->tm_sec = (int)(rem % SECSPERMIN);
+
+    /* compute day of week */
+    if ((weekday = ((ADJUSTED_EPOCH_WDAY + days) % DAYSPERWEEK)) < 0)
+        weekday += DAYSPERWEEK;
+    res->tm_wday = weekday;
+
+    /* compute year, month, day & day of year */
+    /* for description of this algorithm see
+     * http://howardhinnant.github.io/date_algorithms.html#civil_from_days */
+    era = (days >= 0 ? days : days - (DAYS_PER_ERA - 1)) / DAYS_PER_ERA;
+    eraday = days - era * DAYS_PER_ERA;	/* [0, 146096] */
+    erayear = (eraday - eraday / (DAYS_PER_4_YEARS - 1) + eraday / DAYS_PER_CENTURY -
+        eraday / (DAYS_PER_ERA - 1)) / 365;	/* [0, 399] */
+    yearday = eraday - (DAYS_PER_YEAR * erayear + erayear / 4 - erayear / 100);	/* [0, 365] */
+    month = (5 * yearday + 2) / 153;	/* [0, 11] */
+    day = yearday - (153 * month + 2) / 5 + 1;	/* [1, 31] */
+    month += month < 10 ? 2 : -10;
+    year = ADJUSTED_EPOCH_YEAR + erayear + era * YEARS_PER_ERA + (month <= 1);
+
+    res->tm_yday = yearday >= DAYS_PER_YEAR - DAYS_IN_JANUARY - DAYS_IN_FEBRUARY ?
+        yearday - (DAYS_PER_YEAR - DAYS_IN_JANUARY - DAYS_IN_FEBRUARY) :
+        yearday + DAYS_IN_JANUARY + DAYS_IN_FEBRUARY + is_leap_year(erayear);
+    res->tm_year = year - YEAR_BASE;
+    res->tm_mon = month;
+    res->tm_mday = day;
+
+    res->tm_isdst = 0;
+
+    return (res);
+}
+static struct tm*
+    mygmtime(const time_t* tim_p)
+{
+    struct tm tma;
+    return gmtime_r(tim_p, &tma);
 }
 time_t timegm(const struct tm* tm)
 {
@@ -418,7 +479,7 @@ void cmd_autosave(void) {
 void cmd_cfunction(void) {
     unsigned char* p, EndToken;
     EndToken = GetCommandValue((unsigned char*)"End DefineFont");           // this terminates a DefineFont
-//    if (cmdtoken == cmdCSUB) EndToken = GetCommandValue("End CSub");                 // this terminates a CSUB
+    if (cmdtoken == cmdCSUB) EndToken = GetCommandValue((unsigned char*)"End CSub");                 // this terminates a CSUB
     p = cmdline;
     while (*p != 0xff) {
         if (*p == 0) p++;                                            // if it is at the end of an element skip the zero marker
@@ -461,8 +522,9 @@ void cmd_font(void) {
 void cmd_timer(void) {
     while (*cmdline && tokenfunction(*cmdline) != op_equal) cmdline++;
     if (!*cmdline) error((char *)"Syntax");
+    int64_t offset= getinteger(++cmdline) * frequency / 1000;
     QueryPerformanceCounter((LARGE_INTEGER*)&fasttimerat0);
-    fasttimerat0 -= getinteger(++cmdline)/1000 * frequency;
+    fasttimerat0 -= offset;
 }
 void fun_timer(void) {
     int64_t i;
@@ -480,6 +542,8 @@ extern "C" void uSec(int t) {
     }
 }
 void cmd_pause(void) {
+    using clock_type = std::chrono::high_resolution_clock;
+    using namespace std::literals;
     static int interrupted = false;
     MMFLOAT f;
     static int64_t i, j;
@@ -517,7 +581,11 @@ void cmd_pause(void) {
             }
             QueryPerformanceCounter((LARGE_INTEGER*)&j);
             if ((j - i) > int64_t(f * (MMFLOAT)frequency / 1000.0))break;
-
+            if ((j - i) < int64_t((f-50) * (MMFLOAT)frequency / 1000.0)  && !InterruptUsed) {
+                auto when_started = clock_type::now();
+                auto target_time = when_started + 20ms;
+                std::this_thread::sleep_until(target_time);
+            } 
         }
         interrupted = false;
 
@@ -529,6 +597,11 @@ void cmd_pause(void) {
             CheckAbort();
             QueryPerformanceCounter((LARGE_INTEGER*)&j);
             if ((j - i) > int64_t(f * (MMFLOAT)frequency / 1000.0))break;
+            if ((j - i) * 1000 / (MMFLOAT)frequency > 30) {
+                auto when_started = clock_type::now();
+                auto target_time = when_started + 10ms;
+                std::this_thread::sleep_until(target_time);
+            }
         }
     }
 }
@@ -539,8 +612,8 @@ void cmd_restart(void) {
 }
 
 void cmd_test(void) {
-    _excep_code = 0;
-    SoftReset();
+    PInt(noaudio);
+    PRet();
 }
 void cmd_watchdog(void) {
     int i;
@@ -587,9 +660,10 @@ void printoptions(void) {
     else if (Option.mode == 15)	PO2Str("Default mode 15", "1280x1024", 1);
     else if (Option.mode == 16)	PO2Str("Default mode 16", "1920x1080", 1);
     else if (Option.mode == 18)	PO2Str("Default mode 18", "1024x600", 1);
-    else if (Option.mode == 19)	PO2Str("Default mode 18", "3840x2160", 1);
+    else if (Option.mode == 19)	PO2Str("Default mode 19", "1920x1000", 1);
     PO3Int("Default Font", (Option.DefaultFont >> 4) + 1, Option.DefaultFont & 0xf);
     if (strlen((char*)Option.defaultpath))PO2Str("Default path", (char*)Option.defaultpath, 1);
+    if (strlen((char*)Option.searchpath))PO2Str("Search path", (char*)Option.searchpath, 1);
     if (Option.Autorun) PO2Str("Autorun", "ON", 1);
     if (!Option.ColourCode) PO2Str("Colourcode", "OFF", 1);
     if (Option.Listcase != CONFIG_TITLE) PO2Str("Case", CaseList[(int)Option.Listcase], 1);
@@ -667,18 +741,37 @@ void cmd_option(void) {
         char* p;
         int i = 0;
         DWORD j = 0;
+        char path[STRINGSIZE] = { 0 };
         p = (char*)getCstring(tp);	
-        if (!dirExists((const char*)p)) error((char*)"Directory does not exist");// get the directory name and convert to a standard C string
-        i = (int)SetCurrentDirectoryA(p);
+        tidypath(p, path);
+        if (!dirExists((const char*)path)) error((char*)"Directory does not exist");// get the directory name and convert to a standard C string
+        i = (int)SetCurrentDirectoryA(path);
         if (i == 0) {
             j = GetLastError();
             error((char*)"Directory error %", j);
         }
-        strcpy(Option.defaultpath, (const char*)p);
+        strcpy(Option.defaultpath, (const char*)path);
+        if (!(Option.defaultpath[strlen(Option.defaultpath) - 1] == '\\'))strcat(Option.defaultpath, "\\");
+        Option.defaultpath[0] = toupper(Option.defaultpath[0]);
         SaveOptions();
         return;
     }
-        tp = checkstring(cmdline, (unsigned char*)"DEFAULT FONT");
+    tp = checkstring(cmdline, (unsigned char*)"SEARCH PATH");
+    if (tp) {
+        char* p;
+        int i = 0;
+        DWORD j = 0;
+        char path[STRINGSIZE] = { 0 };
+        p = (char*)getCstring(tp);
+        tidypath(p, path);
+        if (!dirExists((const char*)path)) error((char*)"Directory does not exist");// get the directory name and convert to a standard C string
+        strcpy(Option.searchpath, (const char*)path);
+        if (!(Option.searchpath[strlen(Option.searchpath) - 1] == '\\'))strcat(Option.searchpath, "\\");
+        Option.searchpath[0] = toupper(Option.searchpath[0]);
+        SaveOptions();
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"DEFAULT FONT");
     if (tp) {
         if (CurrentLinePtr) error((char *)"Invalid in a program");
         getargs(&tp, 3, (unsigned char*)",");
@@ -748,6 +841,10 @@ void cmd_option(void) {
         else if (checkstring(argv[0], (unsigned char*)"18")) {
             mode = 18;
             DefaultFont = (3 << 4) | 1;
+        }
+        else if (checkstring(argv[0], (unsigned char*)"19")) {
+            mode = 19;
+            DefaultFont = (2 << 4) | 1;
         }
         else error((char *)"Invalid mode");
         if (argc == 3)fullscreen = (bool)getint(argv[2], 0, 1);
@@ -853,11 +950,6 @@ void cmd_option(void) {
         SaveOptions();
         return;
     }
-    tp = checkstring(cmdline, (unsigned char*)"CONSOLE REPEAT");
-    if (tp) {
-        if (checkstring(tp, (unsigned char*)"OFF")) { ConsoleRepeat = 0; return; }
-        if (checkstring(tp, (unsigned char*)"ON")) { ConsoleRepeat = 1; return; }
-    }
     tp = checkstring(cmdline, (unsigned char*)"AUTORUN");
     if (tp) {
         if (checkstring(tp, (unsigned char*)"OFF")) { Option.Autorun = 0; SaveOptions(); return; }
@@ -895,6 +987,7 @@ void cmd_option(void) {
     }
     tp = checkstring(cmdline, (unsigned char*)"RESET");
     if (tp) {
+        if (CurrentLinePtr) error((char*)"Invalid in a program");
         ResetOptions();
         SaveOptions();
         HRes = Option.hres;
@@ -909,6 +1002,21 @@ void cmd_option(void) {
     if (tp) {
         if (checkstring(tp, (unsigned char*)"ON")) { Optionfulltime = true; return; }
         if (checkstring(tp, (unsigned char*)"OFF")) { Optionfulltime = false; return; }
+    }
+    tp = checkstring(cmdline, (unsigned char*)"CONSOLE SCREEN");
+    if (tp) {
+//        if (!CurrentLinePtr) error((char*)"Only valid in a program");
+        OptionConsoleSerial = false; ConsoleRepeat = 0;  return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"CONSOLE SERIAL");
+    if (tp) {
+        if (!CurrentLinePtr) error((char*)"Only valid in a program");
+        OptionConsoleSerial = true; return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"CONSOLE BOTH");
+    if (tp) {
+//        if (!CurrentLinePtr) error((char*)"Only valid in a program");
+        ConsoleRepeat = 1; OptionConsoleSerial = false; return;
     }
     tp = checkstring(cmdline, (unsigned char*)"KEYBOARD");
     if (tp) {
@@ -982,13 +1090,27 @@ void fun_info(void) {
         targ = T_INT;
         return;
     }
-/*    tp = checkstring(ep, (unsigned char*)"FONT ADDRESS");
+    tp = checkstring(ep, (unsigned char*)"FONT POINTER");
     if (tp) {
-        iret = (int64_t)((uint32_t)FontTable[getint(tp, 1, FONT_TABLE_SIZE) - 1]);
+        iret = (int64_t)((uint32_t)&FontTable[getint(tp, 1, FONT_TABLE_SIZE) - 1]);
         targ = T_INT;
         return;
-    }*/
+    }
+    tp = checkstring(ep, (unsigned char*)"CPUSPEED");
+    if (tp) {
+        int64_t frequency;
+        QueryPerformanceFrequency((LARGE_INTEGER*)&frequency);
+        iret = frequency;
+        targ = T_INT;
+        return;
+    }
     tp = checkstring(ep, (unsigned char*)"MAX PAGES");
+    if (tp) {
+        iret = MAXPAGES;
+        targ = T_INT;
+        return;
+    }
+    tp = checkstring(ep, (unsigned char*)"CPUSPEED");
     if (tp) {
         iret = MAXPAGES;
         targ = T_INT;
@@ -1079,6 +1201,26 @@ void fun_info(void) {
             targ = T_INT;
             return;
         }
+        else if (checkstring(tp, (unsigned char*)"CONSOLE")) {
+            if(OptionConsoleSerial == false && ConsoleRepeat == 0)strcpy((char*)sret, "Screen");
+            else if(OptionConsoleSerial == true )strcpy((char*)sret, "Serial");
+            else strcpy((char*)sret, "Both");
+            CtoM(sret);
+            targ = T_STR;
+            return;
+        }
+        else if (checkstring(tp, (unsigned char*)"SEARCH PATH")) {
+            strcpy((char*)sret, Option.searchpath);
+            CtoM(sret);
+            targ = T_STR;
+            return;
+        }
+        else if (checkstring(tp, (unsigned char*)"DEFAULT PATH")) {
+            strcpy((char*)sret, Option.defaultpath);
+            CtoM(sret);
+            targ = T_STR;
+            return;
+        }
         else error((char *)"Syntax");
         CtoM(sret);
         targ = T_STR;
@@ -1158,6 +1300,16 @@ void fun_info(void) {
 //            strcat((char*)sret, "\\");
             if (!*lastfileedited)strcpy((char*)sret, (char*)"NONE");
             else strcpy((char*)sret, lastfileedited);
+        }
+        else if (checkstring(ep, (unsigned char*)"PATH")) {
+            //            strcpy((char *)sret, MMgetcwd());
+            //            strcat((char*)sret, "\\");
+            if (!*lastfileedited)strcpy((char*)sret, (char*)"NONE");
+            else strcpy((char*)sret, lastfileedited);
+            char* p = (char *) &sret[strlen((char*)sret) - 1];
+            while (*p != '\\') {
+                *p-- = 0;
+            }
         }
         else if (checkstring(ep, (unsigned char *)"FONTWIDTH")) {
             iret = FontTable[gui_font >> 4][0] * (gui_font & 0b1111);
@@ -1252,7 +1404,7 @@ void fun_info(void) {
 extern "C" void SoftReset(void) {
     WSACleanup();
     SystemMode = MODE_SOFTRESET;
-    while (1) {}
+    longjmp(mark, 1);
 }
 
 void fun_date(void) {
@@ -1312,7 +1464,7 @@ void fun_day(void) {
         tm->tm_min = 0;
         tm->tm_sec = 0;
         time_of_day = timegm(tm);
-        tm = gmtime(&time_of_day);
+        tm = mygmtime(&time_of_day);
         i = tm->tm_wday;
         if (i == 0)i = 7;
         strcpy((char *)sret, daystrings[i]);
@@ -1392,8 +1544,8 @@ void fun_datetime(void) {
         struct tm tma;
         tm = &tma;
         time_t timestamp = getinteger(ep); /* See README.md if your system lacks timegm(). */
-        if (timestamp < 0)error((char*)"Epoch<0");
-        tm = gmtime(&timestamp);
+//        if (timestamp < 0)error((char*)"Epoch<0");
+        tm = mygmtime(&timestamp);
         IntToStrPad((char*)sret, tm->tm_mday, '0', 2, 10);
         sret[2] = '-'; IntToStrPad((char*)sret + 3, tm->tm_mon + 1, '0', 2, 10);
         sret[5] = '-'; IntToStr((char*)sret + 6, tm->tm_year + 1900, 10);
@@ -2352,7 +2504,15 @@ void fun_mouse(void) {
 void cmd_mouse(void) {
     getargs(&cmdline, 5, (unsigned char*)",");
     if (argc == 0)error((char*)"Syntax");
+    if (checkstring(argv[0], (unsigned char*)"CLOSE")) {
+        MouseInterrupLeftDown = NULL; 
+        MouseFoundRightDown = NULL;
+        MouseInterrupLeftUp = NULL;
+        MouseFoundLeftDown = MouseFoundRightDown = MouseFoundLeftUp = 0;
+        return;
+    }
     if (*argv[0]) {
+        MouseInterrupLeftDown = GetIntAddress(argv[0]);					// get the interrupt location
         MouseFoundLeftDown = 0;
         InterruptUsed = true;
     }
@@ -2417,6 +2577,13 @@ void fun_peek(void) {
         if (argc != 1) error((char *)"Syntax");
         pp = (unsigned char*)findvar(p, V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
         iret = (unsigned int)pp;
+        targ = T_INT;
+        return;
+    }
+    if ((p = checkstring(argv[0], (unsigned char*)"VARHEADER"))) {
+        if (argc != 1) error((char*)"Syntax");
+        pp = (unsigned char*)findvar(p, V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
+        iret = (unsigned int)&vartbl[VarIndex];
         targ = T_INT;
         return;
     }

@@ -473,29 +473,44 @@ void DoHexOctBin(int base) {
     targ = T_STR;
 }
 
+// utility function used by HEX$(), OCT$() and BIN$()
+//void DoHexOctBin(char *tp,int base) {
+void fun_base(void) {
+    unsigned long long int i;
+    int j = 1;
+    //	getargs(&tp, 3, ",");
+    getargs(&ep, 5, (unsigned char*)",");
+    int base = (int)getint(argv[0], 2, 36);
+    i = (unsigned long long int)getinteger(argv[2]);                // get the number
+    if (argc == 5) j = (int)getint(argv[4], 0, MAXSTRLEN);                // get the optional number of chars to return
+    sret = (unsigned char*)GetTempMemory(STRINGSIZE);                                      // this will last for the life of the command
+    IntToStrPad((char*)sret, (signed long long int)i, '0', j, base);
+    CtoM(sret);
+    targ = T_STR;
+}
 
 
 // return the hexadecimal representation of a number
 // s$ = HEX$(nbr)
-void fun_hex(void) {
-    DoHexOctBin(16);
-}
+//void fun_hex(void) {
+//    DoHexOctBin(16);
+//}
 
 
 
 // return the octal representation of a number
 // s$ = OCT$(nbr)
-void fun_oct(void) {
-    DoHexOctBin(8);
-}
+//void fun_oct(void) {
+//    DoHexOctBin(8);
+//}
 
 
 
 // return the binary representation of a number
 // s$ = BIN$(nbr)
-void fun_bin(void) {
-    DoHexOctBin(2);
-}
+//void fun_bin(void) {
+//    DoHexOctBin(2);
+//}
 
 
 

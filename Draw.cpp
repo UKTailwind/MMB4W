@@ -45,7 +45,6 @@ int CurrentX = 0, CurrentY = 0;                                             // t
 int DisplayHRes, DisplayVRes;                                       // the physical characteristics of the display
 volatile int CursorTimer = 0;               // used to time the flashing cursor
 unsigned char* CFunctionFlash = NULL;
-unsigned char* CFunctionLibrary = NULL;
 uint32_t * blitbuffptr[MAXBLITBUF];                                  //Buffer pointers for the BLIT command
 struct s_pagetable PageTable[MAXTOTALPAGES];
 uint32_t linebuff[3840 * 2 * sizeof(uint32_t)];
@@ -54,10 +53,10 @@ s_camera camera[MAXCAM + 1];
 int VideoMode;
 int CMM1 = 0;
 const int64_t colourmap[16] = { M_BLACK,M_BLUE,M_GREEN,M_CYAN,M_RED,M_MAGENTA,M_YELLOW,M_WHITE,M_MYRTLE,M_COBALT,M_MIDGREEN,M_CERULEAN,M_RUST,M_FUCHSIA,M_BROWN,M_LILAC };
-const int xres[MAXMODES + 1] =         { 0,800,640,320,480,240,256,320,640,1024,848,1280,960,400,960,1280,1920,384,1024};
-const int yres[MAXMODES + 1] =         { 0,600,400,200,432,216,240,240,480,768,480,720,540,300,540,1024,1080,240,600};
-const int pixeldensity[MAXMODES + 1] = { 0,  1,  1,  3,  2,  4,  4,  3,  1,  1,  1,  1,  1,  2,  2,  1 ,   1,  3,  1};
-const int defaultfont[MAXMODES + 1] = { 0,1,1,1,1,1,1,1,1,(2 << 4) | 1 ,1 ,(2 << 4) | 1 , (3 << 4) | 1 ,1,1,(2 << 4) | 1 ,(2 << 4) | 1 ,1,(3 << 4) | 1 };
+const int xres[MAXMODES + 1] =         { 0,800,640,320,480,240,256,320,640,1024,848,1280,960,400,960,1280,1920,384,1024, 1920};
+const int yres[MAXMODES + 1] =         { 0,600,400,200,432,216,240,240,480,768,480,720,540,300,540,1024,1080,240,600, 1000};
+const int pixeldensity[MAXMODES + 1] = { 0,  1,  1,  3,  2,  4,  4,  3,  1,  1,  1,  1,  1,  2,  2,  1 ,   1,  3,  1, 1};
+const int defaultfont[MAXMODES + 1] = { 0,1,1,1,1,1,1,1,1,(2 << 4) | 1 ,1 ,(2 << 4) | 1 , (3 << 4) | 1 ,1,1,(2 << 4) | 1 ,(2 << 4) | 1 ,1,(3 << 4) | 1 ,(2 << 4) | 1 };
  typedef struct {
     unsigned char red;
     unsigned char green;
@@ -80,7 +79,7 @@ int    main_fill_poly_vertex_count = 0;       // polygon vertex count
 TFLOAT* main_fill_polyX = NULL; // polygon vertex x-coords
 TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
 
-    unsigned char* FontTable[FONT_TABLE_SIZE] = {   (unsigned char*)font1,
+    volatile unsigned char* FontTable[FONT_TABLE_SIZE] = {   (unsigned char*)font1,
                                                     (unsigned char*)Misc_12x20_LE,
                                                     (unsigned char*)Hom_16x24_LE,
                                                     (unsigned char*)Fnt_10x16,
@@ -99,6 +98,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
 
     };
     extern "C" void SetFont(int fnt) {
+//        PIntH((uint32_t)FontTable[fnt >> 4]); PRet(); uSec(4000000);
         if(FontTable[fnt >> 4] == NULL) error((char *)"Invalid font number #%", (fnt >> 4) + 1);
         gui_font_width = FontTable[fnt >> 4][0] * (fnt & 0b1111);
         gui_font_height = FontTable[fnt >> 4][1] * (fnt & 0b1111);
@@ -311,7 +311,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                 }
             }
         }
-
+        doupdate++;
     }
     extern "C" void DrawRectangle(int x1, int y1, int x2, int y2, int64_t c) {
         int x, y;
@@ -335,6 +335,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                 WritePageAddress[y * HRes + x] = (uint32_t)c | (ARGBenabled ? 0 : 0xFF000000);
             }
         }
+        doupdate++;
     }
     extern "C" void ScrollLCD(int lines) {
         if(lines == 0)return;
@@ -356,6 +357,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             }
             DrawRectangle(0, 0, HRes - 1, lines - 1, gui_bcolour); // erase the lines introduced at the top
         }
+        doupdate++;
     }
     extern "C" int GetFontWidth(int fnt) {
         return FontTable[fnt >> 4][0] * (fnt & 0b1111);
@@ -413,7 +415,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                 }
             }
         }
-        }
+        doupdate++;
+    }
     extern "C" void DrawBuffer32(int x1, int y1, int x2, int y2, char* p, int skip) {
         int x, y, t;
         uint32_t* sc;
@@ -432,32 +435,33 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         if (y2 <= y1) { t = y1; y1 = y2; y2 = t; }
         t = 0;
         int cursorhidden = 0;
-            for (y = y1; y <= y2; y++) {
-                sc = (uint32_t*)((y * maxW + x1) * 4 + wpa);
-                for (x = x1; x <= x2; x++) {
-                    if (x >= 0 && x < maxW && y >= 0 && y < maxH) {
-                        if (skip & 2) {
-                            c.rgbbytes[3] = (char)0xFF; //assume solid colour
-                            c.rgbbytes[0] = *p++; //this order swaps the bytes to match the .BMP file
-                            c.rgbbytes[1] = *p++;
-                            c.rgbbytes[2] = *p++;
-                            if (skip & 1)c.rgbbytes[3] = *p++; //ARGB8888 so set transparency
-                        }
-                        else {
-                            c.rgbbytes[3] = (char)0xFF;
-                            c.rgbbytes[0] = *p++; //this order swaps the bytes to match the .BMP file
-                            c.rgbbytes[1] = *p++;
-                            c.rgbbytes[2] = *p++;
-                            if (skip & 1)p++;
-                        }
-                        *sc = c.rgb;
+        for (y = y1; y <= y2; y++) {
+            sc = (uint32_t*)((y * maxW + x1) * 4 + wpa);
+            for (x = x1; x <= x2; x++) {
+                if (x >= 0 && x < maxW && y >= 0 && y < maxH) {
+                    if (skip & 2) {
+                        c.rgbbytes[3] = (char)0xFF; //assume solid colour
+                        c.rgbbytes[0] = *p++; //this order swaps the bytes to match the .BMP file
+                        c.rgbbytes[1] = *p++;
+                        c.rgbbytes[2] = *p++;
+                        if (skip & 1)c.rgbbytes[3] = *p++; //ARGB8888 so set transparency
                     }
                     else {
-                        p += (skip & 1) ? 4 : 3;
+                        c.rgbbytes[3] = (char)0xFF;
+                        c.rgbbytes[0] = *p++; //this order swaps the bytes to match the .BMP file
+                        c.rgbbytes[1] = *p++;
+                        c.rgbbytes[2] = *p++;
+                        if (skip & 1)p++;
                     }
-                    sc++;
+                    *sc = c.rgb;
                 }
+                else {
+                    p += (skip & 1) ? 4 : 3;
+                }
+                sc++;
             }
+        }
+        doupdate++;
     }
 
     /******************************************************************************************
@@ -3527,6 +3531,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                     }
             }
             ReadPage = WritePage;
+            doupdate++;
             return;
         }
         if ((p = checkstring(cmdline, (unsigned char*)"ROTATE"))) {
@@ -3562,6 +3567,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             copyfromfloat(temp2, nx, ny, w, h, dontcopyblack);
             dealloc3df(temp2, 3, h, w);
             ReadPage = WritePage;
+            doupdate++;
             return;
         }
         if ((p = checkstring(cmdline, (unsigned char*)"WARP_H"))) {
@@ -3634,6 +3640,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             }
             // tidy up
             ReadPage = WritePage;
+            doupdate++;
             return;
         }
 
@@ -3707,6 +3714,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
              }
             // tidy up
             ReadPage = WritePage;
+            doupdate++;
             return;
         }
         if ((p = checkstring(cmdline, (unsigned char*)"RESIZE_FAST"))) {
@@ -3777,6 +3785,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                     }
              }
             ReadPage = WritePage;
+            doupdate++;
             return;
         }
 
@@ -3814,6 +3823,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             copyfromfloat(temp2, nx, ny, nw, nh, dontcopyblack);
             dealloc3df(temp2, 3, nh, nw);
             ReadPage = WritePage;
+            doupdate++;
             return;
         }
         error((char *)"Syntax");
@@ -4468,6 +4478,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             if (struct3d[n] == NULL)error((char *)"Object % does not exist", n);
             if (camera[struct3d[n]->camera].viewplane == -32767)error((char *)"Camera position not defined");
             display3d(n, x, y, z, 0, nonormals);
+            doupdate++;
             return;
         }
         else if ((p = checkstring(cmdline, (unsigned char *)"CLOSE ALL"))) {

@@ -97,7 +97,7 @@ extern "C" int getConsole(int speed) {
     }
     else if(!speed){
         auto when_started = clock_type::now();
-        auto target_time = when_started + 1ms;
+        auto target_time = when_started + 20ms;
         std::this_thread::sleep_until(target_time);
     }
     return c;
@@ -525,6 +525,7 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     OptionErrorSkip = false;
     InitBasic();
     *tknbuf = 0;
+    OptionConsoleSerial = false;
     ContinuePoint = nextstmt;                               // in case the user wants to use the continue command
     ErrorInPrompt = false;
     CurrentX = CurrentY = 0;
@@ -535,6 +536,8 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     VideoMode = Option.mode;
     QueryPerformanceFrequency((LARGE_INTEGER*) &frequency);
     QueryPerformanceCounter((LARGE_INTEGER*) &startfasttime);
+    QueryPerformanceCounter((LARGE_INTEGER*)&fasttimerat0);
+
     while (mSecTimer < 1000) {}
     while (!DisplayActive) {}
     if (!(_excep_code == RESTART_NOAUTORUN || _excep_code == WATCHDOG_TIMEOUT || _excep_code == SCREWUP_TIMEOUT)) {
@@ -577,6 +580,7 @@ DWORD WINAPI Basic(LPVOID lpParameter)
         WSACleanup();
         error((char*)"Could not find a usable version of Winsock.dll\n");
     }
+    CloseAllFiles();
 
     if(setjmp(mark) != 0) {
         // we got here via a long jump which means an error or CTRL-C or the program wants to exit to the command prompt
@@ -588,6 +592,7 @@ DWORD WINAPI Basic(LPVOID lpParameter)
         clearrepeat();
         WritePage=0;
         ReadPage=0;
+        OptionConsoleSerial = false;
         if(VideoMode==Option.mode)SetFont(Option.DefaultFont);
         else SetFont(defaultfont[VideoMode]);
         PromptFC = M_WHITE; PromptBC = M_BLACK;                             // the font and colours selected at the prompt
@@ -597,6 +602,7 @@ DWORD WINAPI Basic(LPVOID lpParameter)
         CurrentX = 0;
         if (errpos) {
             CloseAllFiles();
+            if (CurrentX != 0) MMPrintString((char*)"\r\n");                   // error message should be on a new line
             MMPrintString(errstring);
             memset(inpbuf, 0, STRINGSIZE);
         }
@@ -605,16 +611,44 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     }
     else {
         if (lpParameter != NULL) {
-            strcpy((char*)tknbuf, (char*)lpParameter);
-            if (strchr((char*)tknbuf, '.') == NULL) strcat((char*)tknbuf, ".BAS");
-            if (existsfile((char *)tknbuf)) {
-                strcpy((char*)inpbuf, "RUN \"");
-                strcat((char*)inpbuf, (char*)tknbuf);
-                strcat((char*)inpbuf, "\"");
-                memset(tknbuf, 0, STRINGSIZE);
-                tokenise(true);
+            char params[STRINGSIZE] = { 0 };
+            strcpy((char*)inpbuf, (char*)lpParameter);
+            char* q=strchr((char*)inpbuf, ',');
+            if (q != NULL) {
+                *q = 0;
+                q++;
+                strcpy(params, q);
+            }
+            if (strchr((char*)inpbuf, '.') == NULL) strcat((char*)inpbuf, ".BAS");
+            if (existsfile((char *)inpbuf)) {
+                tknbuf[0] = GetCommandValue((unsigned char*)"RUN");
+                strcat((char*)tknbuf, "\"");
+                strcat((char*)tknbuf, (char*)inpbuf);
+                strcat((char*)tknbuf, "\"");
+                if (*params) {
+                    strcat((char*)tknbuf, ",");
+                    strcat((char*)tknbuf, params);
+                }
                 ExecuteProgram(tknbuf);                                     // execute the line straight away
                 memset(inpbuf, 0, STRINGSIZE);
+            }
+            else {
+                char path[STRINGSIZE] = { 0 }, name[STRINGSIZE] = { 0 };
+                tidyfilename((char *)inpbuf, path, name, 1);
+                strcpy((char*)inpbuf, path);
+                strcat((char*)inpbuf, name);
+                if (existsfile((char*)inpbuf)) {
+                    tknbuf[0] = GetCommandValue((unsigned char*)"RUN");
+                    strcat((char*)tknbuf, "\"");
+                    strcat((char*)tknbuf, (char*)inpbuf);
+                    strcat((char*)tknbuf, "\"");
+                    if (*params) {
+                        strcat((char*)tknbuf, ",");
+                        strcat((char*)tknbuf, params);
+                    }
+                    ExecuteProgram(tknbuf);                                     // execute the line straight away
+                    memset(inpbuf, 0, STRINGSIZE);
+                }
             }
         }
         if (*lastfileedited && Option.Autorun) {
@@ -634,6 +668,7 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     while (!(SystemMode == MODE_STOPTHREADS || SystemMode == MODE_SOFTRESET)) {
         MMAbort = false;
         BreakKey = BREAK_KEY;
+        OptionConsoleSerial = false;
         EchoOption = true;
         LocalIndex = 0;                                             // this should not be needed but it ensures that all space will be cleared
         ClearTempMemory();                                          // clear temp string space (might have been used by the prompt)
@@ -684,7 +719,6 @@ DWORD WINAPI mClock(LPVOID lpParameter)
 		std::this_thread::sleep_until(target_time);
 		target_time += 1ms;
         if(++CursorTimer > CURSOR_OFF + CURSOR_ON) CursorTimer = 0;		// used to control cursor blink rate
-//        PauseTimer++;                                                     // used by the PAUSE command
         mSecTimer++; 
         AHRSTimer++;
         MouseTimer++;
@@ -718,7 +752,7 @@ DWORD WINAPI mClock(LPVOID lpParameter)
         }
         if (ClickTimer) {
             ClickTimer--;
-            if(!ClickTimer)bSynthPlaying = false;
+//            if(!ClickTimer)bSynthPlaying = false;
         }
 
     }
@@ -842,7 +876,7 @@ extern "C" void SaveProgramToMemory(unsigned char* pm, int msg) {
             p += p[1] + 2;                                          // skip over the label
             skipspace(p);                                           // and any following spaces
         }
-        if (/**p == cmdCSUB ||*/ *p == GetCommandValue((unsigned char*)"DefineFont")) {      // found a CFUNCTION, CSUB or DEFINEFONT token
+        if (*p == cmdCSUB || *p == GetCommandValue((unsigned char*)"DefineFont")) {      // found a CFUNCTION, CSUB or DEFINEFONT token
             if (*p == GetCommandValue((unsigned char*)"DefineFont")) {
                 endtoken = GetCommandValue((unsigned char*)"End DefineFont");
                 p++;                                                // step over the token
@@ -855,12 +889,12 @@ extern "C" void SaveProgramToMemory(unsigned char* pm, int msg) {
                 skipelement(p);                                     // go to the end of the command
                 p--;
             }
-//            else {
-//                endtoken = GetCommandValue((unsigned char*)"End CSub");
-//                realmempointer += 4;
-//                fontnbr = 0;
-//                firsthex = 0;
-//            }
+            else {
+                endtoken = GetCommandValue((unsigned char*)"End CSub");
+                realmempointer += 4;
+                fontnbr = 0;
+                firsthex = 0;
+            }
             SaveSizeAddr = realmempointer;                                // save where we are so that we can write the CFun size in here
             realmempointer += 4;
             p++;
@@ -933,7 +967,7 @@ extern "C" void SaveProgramToMemory(unsigned char* pm, int msg) {
             p += p[1] + 2;                                          // skip over the label
             skipspace(p);                                           // and any following spaces
         }
-        if (/**p == cmdCSUB ||*/ *p == GetCommandValue((unsigned char*)"DefineFont")) {      // found a CFUNCTION, CSUB or DEFINEFONT token
+        if (*p == cmdCSUB || *p == GetCommandValue((unsigned char*)"DefineFont")) {      // found a CFUNCTION, CSUB or DEFINEFONT token
             if (*p == GetCommandValue((unsigned char*)"DefineFont")) {      // found a CFUNCTION, CSUB or DEFINEFONT token
                 endtoken = GetCommandValue((unsigned char*)"End DefineFont");
                 p++;                                                // step over the token
@@ -947,11 +981,11 @@ extern "C" void SaveProgramToMemory(unsigned char* pm, int msg) {
                 skipelement(p);                                     // go to the end of the command
                 p--;
             }
- //           else {
- //               endtoken = GetCommandValue((unsigned char *)"End CSub");
- //               MemWriteWord((unsigned int)p);               // if a CFunction/CSub save a pointer to the declaration
- //               fontnbr = 0;
- //           }
+            else {
+                endtoken = GetCommandValue((unsigned char *)"End CSub");
+                MemWriteWord((unsigned int)p);               // if a CFunction/CSub save a pointer to the declaration
+                fontnbr = 0;
+            }
             SaveSizeAddr = realmempointer;                                // save where we are so that we can write the CFun size in here
             MemWriteWord(storedupdates[updatecount++]);                        // leave this blank so that we can later do the write
             p++;

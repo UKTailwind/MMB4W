@@ -52,10 +52,11 @@ int ARGBenabled = 0;
 // Default layer is used as Page 0
 // Next layer
 int MMAbort = false;
+int noaudio = 0;
 volatile int HRes, VRes, PixelSize, PlayBeep;
 volatile int SystemMode = MODE_RUN;
 MMBasic* demo;
-bool bSynthPlaying = false;
+int64_t doupdate = 10;
 volatile float fSynthFrequencyL = 261.63f;
 volatile float fSynthFrequencyR = 261.63f;
 volatile float fFilterVolumeL = 1.0f;
@@ -255,12 +256,15 @@ bool MMBasic::OnUserUpdate(float fElapsedTime)
 	auto when_started = clock_type::now();
 	auto target_time = when_started + 10ms;
 	CheckKeyBoard();
-	SetPixelMode(olc::Pixel::NORMAL);
-	SetDrawTarget(PAGE0);
-	for (int y = 0; y < VRes; y++) {
-		for (int x = 0; x < HRes; x++) {
-			Draw(x, y, PageWrite0[y * HRes + x]);
+	if (doupdate) {
+		SetPixelMode(olc::Pixel::NORMAL);
+		SetDrawTarget(PAGE0);
+		for (int y = 0; y < VRes; y++) {
+			for (int x = 0; x < HRes; x++) {
+				Draw(x, y, PageWrite0[y * HRes + x]);
+			}
 		}
+		doupdate--;
 	}
 	if(ARGBenabled){
 		SetPixelMode(olc::Pixel::NORMAL);
@@ -307,10 +311,11 @@ bool MMBasic::OnUserCreate()
 	SetPixelMode(olc::Pixel::NORMAL);
 	Clear((uint32_t)BackGroundColour);
 	int bufferneeded = RoundUptoPage(SampleRate * NChannels /96) ;
-	olc::SOUND::InitialiseAudio(SampleRate, NChannels, 8, bufferneeded);
 	using namespace std::placeholders;
-	// This gives a compilation error and I can't find the correct syntax
-	olc::SOUND::SetUserSynthFunction(std::bind(&MMBasic::MyCustomSynthFunction, demo, _1, _2, _3));
+	if (!noaudio) {
+		olc::SOUND::InitialiseAudio(SampleRate, NChannels, 8, bufferneeded);
+		olc::SOUND::SetUserSynthFunction(std::bind(&MMBasic::MyCustomSynthFunction, demo, _1, _2, _3));
+	}
 	return true;
 }
 bool MMBasic::OnUserDestroy()
@@ -318,7 +323,7 @@ bool MMBasic::OnUserDestroy()
 	using namespace std;
 	memset((char*)FrameBuffer, 0, FRAMEBUFFERSIZE);
 	CurrentX = CurrentY = 0;
-	olc::SOUND::DestroyAudio();
+	if (!noaudio)olc::SOUND::DestroyAudio();
 	return true;
 }
 DWORD WINAPI Screen(LPVOID lpParameter)
@@ -333,10 +338,15 @@ int main(int argc, char* argv[]) {
 	demo = new MMBasic;
 	unsigned int myCounter = 0;
 	DWORD TimerID;
+	if (argc>1) {
+		if (*argv[1] == '0') {
+			noaudio = 1;
+		}
+	}
 	HANDLE myTHandle = CreateThread(0, 0, mClock, NULL, 0, &TimerID);
 	while (mSecTimer < 200) {}
 	DWORD BasicID;
-	HANDLE myHandle=CreateThread(0, 0, Basic, argv[1], 0, &BasicID);
+	HANDLE myHandle=CreateThread(0, 0, Basic, (noaudio==1? argv[2]:argv[1]), 0, &BasicID);
 	while (mSecTimer < 400) {}
 	DWORD ScreenID;
 	HANDLE mySHandle = CreateThread(0, 0, Screen, NULL, 0, &ScreenID);
@@ -378,9 +388,9 @@ int main(int argc, char* argv[]) {
 			myHandle = CreateThread(0, 0, Basic, NULL, 0, &BasicID);
 			break;
 		case MODE_SAMPLERATE:
-			olc::SOUND::DestroyAudio();
+			if (!noaudio)olc::SOUND::DestroyAudio();
 			int bufferneeded = RoundUptoPage(SampleRate * NChannels / 96);
-			olc::SOUND::InitialiseAudio(SampleRate, NChannels, 8, bufferneeded);
+			if (!noaudio)olc::SOUND::InitialiseAudio(SampleRate, NChannels, 8, bufferneeded);
 			SystemMode = MODE_RUN;
 			break;
 		}

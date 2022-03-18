@@ -90,7 +90,6 @@ void op_inv(void);
 	{ (unsigned char *)"+",			T_OPER | T_NBR | T_INT | T_STR, 2, op_add		},
 	{ (unsigned char *)"-",			T_OPER | T_NBR | T_INT,		2, op_subtract          },
 	{ (unsigned char *)"Not",		T_OPER | T_NBR | T_INT,			3, op_not		},
-	{ (unsigned char *)"INV",			T_OPER | T_NBR | T_INT,			3, op_inv		},
 	{ (unsigned char *)"<<",			T_OPER | T_INT,                 4, op_shiftleft		},
 	{ (unsigned char *)">>",			T_OPER | T_INT,                 4, op_shiftright	},
 	{ (unsigned char *)"<>",			T_OPER | T_NBR | T_INT | T_STR, 5, op_ne		},
@@ -103,6 +102,7 @@ void op_inv(void);
 	{ (unsigned char *)"Or",			T_OPER | T_INT,			7, op_or		},
 	{ (unsigned char *)"Xor",		T_OPER | T_INT,			7, op_xor		},
 	{ (unsigned char *)"As",			T_NA,			0, op_invalid },
+	{ (unsigned char *)"Inv",			T_OPER | T_NBR | T_INT,			3, op_inv },
 
 #endif
 

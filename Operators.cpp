@@ -213,11 +213,11 @@ void  op_xor(void) {
 
 void  op_not(void){
 	// don't do anything, just a place holder
-	error((char *)"Syntax error");
+	error((char *)"Syntax error1");
 }
 
 void  op_inv(void){
 	// don't do anything, just a place holder
-	error((char *)"Syntax error");
+	error((char *)"Syntax error2");
 }
 

@@ -42,10 +42,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "Shlwapi.h"
 
 extern "C" uint8_t BMP_bDecode(int x, int y, int fnbr);
-extern "C" int strcasecmp(const char* s1, const char* s2);
 void tidypath(char* p, char* qq);
 int dirflags;
-union uFileTable FileTable[MAXOPENFILES + 1];
+union uFileTable FileTable[MAXOPENFILES + 1]={0};
 int OptionFileErrorAbort = true;
 static uint32_t g_nInFileSize;
 static uint32_t g_nInFileOfs;
@@ -149,7 +148,7 @@ extern "C" int64_t filesize(char* fname) {
     char path[STRINGSIZE] = { 0 };
     char q[STRINGSIZE] = { 0 };
     strcpy(q, fname);
-    tidyfilename(q, path, filename);
+    tidyfilename(q, path, filename,0);
     strcpy(q, path);
     strcat(q, filename);
     WIN32_FIND_DATAA fdFile;
@@ -191,7 +190,7 @@ extern "C" int BasicFileOpen(char* fname, int fnbr, char *mode) {
     if (fnbr < 1 || fnbr > MAXOPENFILES) error((char *)"File number");
     if (FileTable[fnbr].com != 0) error((char *)"File number already open");
     // if we are writing check the write protect pin (negative pin number means that low = write protect)
-    FileTable[fnbr].fptr = (FILE *)GetMemory(sizeof(FILE));              // allocate the file descriptor
+//    FileTable[fnbr].fptr = (FILE *)GetMemory(sizeof(FILE));              // allocate the file descriptor
     MMfopen(fname, mode, fnbr);
     return true;
 }
@@ -213,7 +212,7 @@ extern "C" int MMfgetc(int fnbr) {
 // if fnbr == 0 then send the char to the console
 // otherwise the COM port or file opened as #fnbr
 extern "C" unsigned char MMfputc(unsigned char c, int fnbr) {
-    if (fnbr == 99999) {
+    if (fnbr == 99999 || OptionConsoleSerial) {
         char b[2] = { 0 };
         b[0] = c;
         std::cout << b;
@@ -230,22 +229,11 @@ extern "C" unsigned char MMfputc(unsigned char c, int fnbr) {
     else c = SerialPutchar(FileTable[fnbr].com, c);                   // send the char to the serial port
     return c;
 }
-// output a string to a file
-// the string must be a MMBasic string
-/*extern "C" void MMfputs(unsigned char* p, int filenbr) {
-    int i;
-    i = *p++;
-    if(FileTable[filenbr].com > MAXCOMPORTS) {
-        if(fwrite(p, 1, i, FileTable[filenbr].fptr) != i)error((char*)"File write");
-    }
-    else {
-        while (i--) MMfputc(*p++, filenbr);
-    }
-}*/
+
 extern "C" void MMfputs(unsigned char* p, int filenbr) {
     int i;
     i = *p++;
-    if (filenbr == 99999) {
+    if (filenbr == 99999 || OptionConsoleSerial) {
         while (i--)MMfputc(*p++,99999);
         return;
     }
@@ -304,11 +292,12 @@ extern "C" int FindFreeFileNbr(void) {
 }
 extern "C" int32_t MMfeof(int32_t fnbr) {
     int32_t i=0, c;
-    if (fnbr < 0 || fnbr > 10) error((char *)"Invalid file number");
+    if (fnbr < 0 || fnbr > MAXOPENFILES) error((char *)"Invalid file number");
     if (fnbr == 0) return 0;
     if (FileTable[fnbr].fptr== NULL) error((char*)"File number % is not open", fnbr);
     if ((uint32_t)FileTable[fnbr].fptr > MAXCOMPORTS) {
         errno = 0;
+        fflush(FileTable[fnbr].fptr);
         c = fgetc(FileTable[fnbr].fptr);										// the Watcom compiler will only set eof after it has tried to read beyond the end of file
         i = (feof(FileTable[fnbr].fptr) != 0) ? -1 : 0;
         ungetc(c, FileTable[fnbr].fptr);										// undo the Watcom bug fix
@@ -385,6 +374,9 @@ void importfile(unsigned char* path, unsigned char* filename, unsigned char** p,
     int c, f, slen, data;
     fnbr = FindFreeFileNbr();
     char* q;
+//    MMPrintString((char*)"path = "); MMPrintString((char*)path); PRet();
+//    MMPrintString((char*)"file = "); MMPrintString((char*)filename); PRet();
+
     if ((q = strchr((char *)filename, 34)) == 0) error((char *)"Syntax");
     q++;
     if ((q = strchr(q, 34)) == 0) error((char *)"Syntax");
@@ -540,15 +532,35 @@ int FileLoadProgram(unsigned char* fn, int mode) {
     CloseAllFiles();
     ClearProgram();                                                 // clear any leftovers from the previous program
     fnbr = FindFreeFileNbr();
-    if (mode)strcpy(buff, (char*)fn);
+    if (mode) {
+        strcpy(buff, (char*)fn);
+        strcpy(path, buff);
+        char* e = &path[strlen(path) - 1];
+        while (*e != '\\') {
+            *e = 0;
+            e--;
+        }
+    }
     else {
         p = (char*)getCstring(fn);
         strcpy(buff, p);
+        tidyfilename(buff, path, name,0);
+        strcpy(buff, path);
+        strcat(buff, name);
+        if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
+        if (!existsfile(buff)) {
+            strcpy(buff, p);
+            tidyfilename(buff, path, name, 1);
+            strcpy(buff, path);
+            strcat(buff, name);
+            if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
+            if (!existsfile(buff))error((char*)"File not found");
+        }
     }
-    tidyfilename(buff, path, name);
-    strcpy(buff, path);
-    strcat(buff, name);
-    if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
+//    tidyfilename(buff, path, name,0);
+//    strcpy(buff, path);
+//    strcat(buff, name);
+//    if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
     if (!BasicFileOpen(buff, fnbr, (char*)"rb")) return false;
     strcpy(lastfileedited, buff);
     strcpy(Option.lastfilename, buff);
@@ -1049,7 +1061,7 @@ bool ListDirectoryContents(const char* sDir, const char *mask, int sortorder)
 
     //Specify a file mask. *.* = We want everything!
     strcpy(sPath, sDir);
-    strcat(sPath, "\\");
+//    strcat(sPath, "\\");
     strcat(sPath, mask);
 //    sprintf(sPath, "%s\\*.*", sDir);
 
@@ -1249,7 +1261,7 @@ extern "C" void tidypath(char* p, char* qq) {
 //        if (qq[strlen(qq) - 1] != '\\')strcat(qq, "\\");
     }
 }
-extern "C" void tidyfilename(char* p, char* path, char* filename) {
+extern "C" void tidyfilename(char* p, char* path, char* filename, int search) {
     char q[STRINGSIZE] = { 0 };
     char r[STRINGSIZE] = { 0 };
     strcpy(q, p);
@@ -1262,7 +1274,8 @@ extern "C" void tidyfilename(char* p, char* path, char* filename) {
         i++;
     }
     else {
-        strcpy(path, MMgetcwd());
+        if (search == 0)strcpy(path, MMgetcwd());
+        else strcpy(path, Option.searchpath);
     }
     if (!(path[strlen(path) - 1] == '/' || path[strlen(path) - 1] == '\\'))strcat(path, "\\");
     strcpy(filename, &p[i]);
@@ -1272,7 +1285,7 @@ extern "C" void fullfilename(char* infile, char* outfile, const char * extension
     char filename[STRINGSIZE] = { 0 };
     char path[STRINGSIZE] = { 0 };
     strcpy(q, infile);
-    tidyfilename(q, path, filename);
+    tidyfilename(q, path, filename,0);
     strcpy(q, path);
     strcat(q, filename);
     if (strchr((char*)q, '.') == NULL && extension != NULL) strcat((char*)q, extension);
@@ -1300,7 +1313,7 @@ void cmd_files(void) {
         }
     }
     else strcpy(q, ".\\*");
-    tidyfilename(q, path, filename);
+    tidyfilename(q, path, filename,0);
     ListDirectoryContents((const char*)path, (const char*)filename, sortorder);
 }
 void fun_cwd(void) {
@@ -1311,6 +1324,10 @@ void fun_cwd(void) {
 void cmd_chdir(void) {
     if (checkstring(cmdline, (unsigned char*)"DEFAULT")) {
         SetCurrentDirectoryA(Option.defaultpath);
+        return;
+    }
+    if (checkstring(cmdline, (unsigned char*)"SEARCH")) {
+        SetCurrentDirectoryA(Option.searchpath);
         return;
     }
     char* qq = (char*)GetTempMemory(STRINGSIZE);
@@ -1603,9 +1620,8 @@ void fun_lof(void) {
         if (FileTable[fnbr].com > MAXCOMPORTS) {
             pos = ftell(FileTable[fnbr].fptr);
             fseek(FileTable[fnbr].fptr, 0L, SEEK_END);
-            iret = ftell(FileTable[fnbr].fptr)-pos;
+            iret = ftell(FileTable[fnbr].fptr);
             fseek(FileTable[fnbr].fptr, pos, SEEK_SET);
-
         }
         else iret = (TX_BUFFER_SIZE - SerialTxStatus(FileTable[fnbr].com));
     }
@@ -2046,7 +2062,7 @@ void cmd_system(void) {
         if (vartbl[VarIndex].type & T_INT) {
             if (vartbl[VarIndex].dims[1] != 0) error((char*)"Invalid variable");
             if (vartbl[VarIndex].dims[0] <= 0) {		// Not an array
-                error((char*)"Argument 2 must be integer array");
+                error((char*)"Invalid variable");
             }
             src = (int64_t*)ptr2;
             q = (char*)&src[1];
@@ -2065,8 +2081,28 @@ void cmd_system(void) {
             }
             src[0] = i;
             _pclose(system_file);
-        }
-        else error((char*)"Argument 2 must be integer array");
+        } else if (vartbl[VarIndex].type & T_STR) {
+            if (vartbl[VarIndex].dims[0] > 0) {		// Not an array
+                error((char*)"Invalid variable");
+            }
+            q = (char*)ptr2;
+            i = 1;
+            size = 254;
+            system_file = _popen(p, "r");
+            while (!feof(system_file) && i < size) {
+                ic = (char)fgetc(system_file);
+                if (!feof(system_file)) {
+                    q[i] = ic;
+                    i++;
+                    if (ic == '\n') {
+                        q[i] = '\r';
+                        i++;
+                    }
+                }
+            }
+            q[0] = i;
+            _pclose(system_file);
+        } else error((char*)"Syntax");
     }
     else error((char*)"Syntax");
 }

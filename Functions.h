@@ -33,6 +33,7 @@ void fun_abs(void);
 void fun_asc(void);
 void fun_atn(void);
 void fun_atan2(void);
+void fun_base(void); 
 void fun_bin(void);
 void fun_chr(void);
 void fun_cint(void);
@@ -116,7 +117,8 @@ void fun_cmdline(void);
 { (unsigned char*)"ASin(",		T_FUN | T_NBR,			0, fun_asin },
 { (unsigned char*)"Atn(",		T_FUN | T_NBR,			0, fun_atn },
 { (unsigned char*)"Atan2(",		T_FUN | T_NBR,			0, fun_atan2 },
-{ (unsigned char*)"Bin$(",		T_FUN | T_STR,			0, fun_bin },
+{ (unsigned char*)"Base$(",		T_FUN | T_STR,			0, fun_base },
+//{ (unsigned char*)"Bin$(",		T_FUN | T_STR,			0, fun_bin },
 { (unsigned char*)"Bound(",		T_FUN | T_INT,			0, fun_bound },
 { (unsigned char*)"Choice(",	T_FUN | T_STR | T_INT | T_NBR,		0, fun_ternary },
 { (unsigned char*)"Chr$(",		T_FUN | T_STR,			0, fun_chr, },
@@ -126,7 +128,7 @@ void fun_cmdline(void);
 { (unsigned char*)"Exp(",		T_FUN | T_NBR,			0, fun_exp },
 { (unsigned char*)"Field$(",    T_FUN | T_STR,			0, fun_field },
 { (unsigned char*)"Fix(",		T_FUN | T_INT,			0, fun_fix },
-{ (unsigned char*)"Hex$(",		T_FUN | T_STR,			0, fun_hex },
+//{ (unsigned char*)"Hex$(",		T_FUN | T_STR,			0, fun_hex },
 { (unsigned char*)"Inkey$",	T_FNA | T_STR,         0, fun_inkey },
 { (unsigned char*)"Instr(",		T_FUN | T_INT,			0, fun_instr },
 { (unsigned char*)"Int(",		T_FUN | T_INT,			0, fun_int },
@@ -138,7 +140,7 @@ void fun_cmdline(void);
 { (unsigned char*)"MM.Errno",	T_FNA | T_INT,		0, fun_errno },
 { (unsigned char*)"MM.ErrMsg$", T_FNA | T_STR,         0, fun_errmsg },
 { (unsigned char*)"MM.Ver",		T_FNA | T_NBR,			0, fun_version },
-{ (unsigned char*)"Oct$(",		T_FUN | T_STR,			0, fun_oct },
+//{ (unsigned char*)"Oct$(",		T_FUN | T_STR,			0, fun_oct },
 //	{ (unsigned char *)"Peek(",		T_FUN  | T_INT,			0, fun_peek		},
 { (unsigned char*)"Pi",			T_FNA | T_NBR,			0, fun_pi },
 { (unsigned char*)"Pos",		T_FNA | T_INT,                 0, fun_pos },

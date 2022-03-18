@@ -24,7 +24,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 ************************************************************************************************************************/
 #pragma once
 #define RoundUptoPage(a)     ((((uint64_t)a) + (uint64_t)(256 - 1)) & (uint64_t)(~(256 - 1)))// round up to the nearest whole integer
-#define MagicKey 0x936C28E6
+#define MagicKey 0x934248E6
 #define HEAP_MEMORY_SIZE	(65536*1024*2)
 #define MAX_PROG_SIZE		(1024*1024)
 #define CONSOLE_RX_BUF_SIZE MAX_PROG_SIZE
@@ -65,7 +65,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #define CONFIG_LOWER		1
 #define CONFIG_UPPER		2
 #define VCHARS				25					// nbr of lines in the DOS box (used in LIST)
-#define MAXMODES			18
+#define MAXMODES			19
 #define MAXCTRLS			1000
 #define RESET_COMMAND       9999                                // indicates that the reset was caused by the RESET command
 #define WATCHDOG_TIMEOUT    9998                                // reset caused by the watchdog timer
@@ -89,12 +89,13 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #define MAXLAYER            10                      // maximum number of sprite layers
 #define MAX3D				256						// Maximum number of 3D objects
 #define MAXCAM				6						// Maximum number of cameras
+#define MAXRESTORE          50
 #define FLOAT3D double
 #define sqrt3d sqrtf
 #define round3d roundf
 #define fabs3d fabsf
 #define MAX_POLYGON_VERTICES 128
-#define POKERANGE(a)   ((a>=(uint32_t)FrameBuffer && a<(uint32_t)FrameBuffer+FRAMEBUFFERSIZE) || (a >= (uint32_t)vartbl && a < (uint32_t)vartbl + MAXVARS * sizeof(s_vartbl)) || (a>=(uint32_t)MMHeap && a< (uint32_t)MMHeap+HEAP_MEMORY_SIZE))
+#define POKERANGE(a)   ((a>=(uint32_t)FrameBuffer && a<(uint32_t)FrameBuffer+FRAMEBUFFERSIZE) || (a >= (uint32_t)vartbl && a < (uint32_t)vartbl + MAXVARS * sizeof(s_vartbl)) || (a>=(uint32_t)MMHeap && a< (uint32_t)MMHeap+HEAP_MEMORY_SIZE|| (a>=(uint32_t)ProgMemory && a< (uint32_t)ProgMemory+MAX_PROG_SIZE)))
 #define MAXDEFINES			256						// Maximum number of #define in file
 
 #define MES_SIGNON  "\rWindows MMBasic Version " VERSION "\r\n"\

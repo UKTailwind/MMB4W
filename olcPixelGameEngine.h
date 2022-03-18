@@ -1740,7 +1740,7 @@ namespace olc
 		if(platform->ApplicationStartUp() != olc::OK) return olc::FAIL;
 
 		// Construct the window
-		if(platform->CreateWindowPane({ 30,30 }, vWindowSize, bFullScreen) != olc::OK) return olc::FAIL;
+		if(platform->CreateWindowPane({ 1,1 }, vWindowSize, bFullScreen) != olc::OK) return olc::FAIL;
 		olc_UpdateWindowSize(vWindowSize.x, vWindowSize.y);
 
 		// Start the thread
@@ -4668,9 +4668,9 @@ namespace olc
 
 			olc_hWnd = CreateWindowEx(dwExStyle, olcT("OLC_PIXEL_GAME_ENGINE"), olcT(""), dwStyle,
 				vTopLeft.x, vTopLeft.y, width, height, NULL, NULL, GetModuleHandle(nullptr), this);
-			SetFocus(olc_hWnd);
 			ptrPGE->olc_UpdateKeyFocus(true);
 			ptrPGE->olc_UpdateMouseFocus(true);
+			SetWindowPos(olc_hWnd, HWND_TOP, (vWindowSize.x-width)/2, 0, width, height, SWP_NOSIZE);
 			// Create Keyboard Mapping
 			mapKeys[0x00] = Key::NONE;
 			mapKeys[0x41] = Key::A; mapKeys[0x42] = Key::B; mapKeys[0x43] = Key::C; mapKeys[0x44] = Key::D; mapKeys[0x45] = Key::E;
@@ -5313,7 +5313,7 @@ namespace olc {
 		if(platform->ApplicationStartUp() != olc::OK) return olc::FAIL;
 
 		// Construct the window
-		if(platform->CreateWindowPane({ 30,30 }, vWindowSize, bFullScreen) != olc::OK) return olc::FAIL;
+		if(platform->CreateWindowPane({ 1,1 }, vWindowSize, bFullScreen) != olc::OK) return olc::FAIL;
 		olc_UpdateWindowSize(vWindowSize.x, vWindowSize.y);
 
 		if(platform->ThreadStartUp() == olc::FAIL)  return olc::FAIL;
@@ -5738,7 +5738,7 @@ namespace olc
 		if(platform->ApplicationStartUp() != olc::OK) return olc::FAIL;
 
 		// Construct the window
-		if(platform->CreateWindowPane({ 30,30 }, vWindowSize, bFullScreen) != olc::OK) return olc::FAIL;
+		if(platform->CreateWindowPane({ 1,1 }, vWindowSize, bFullScreen) != olc::OK) return olc::FAIL;
 		olc_UpdateWindowSize(vWindowSize.x, vWindowSize.y);
 
 		// Some implementations may form an event loop here

@@ -1026,7 +1026,6 @@ extern "C" void CloseAudio(int all) {
 	swingbuf = nextbuf = playreadcomplete = 0;
 	bcounte[1] = bcounte[2] = wav_filesize = 0;
 	swingbufe = nextbufe = playreadcompletee = 0;
-	bSynthPlaying = 0;
 	//    WAVInterrupt = NULL;
 	if (was_playing == P_MP3 || was_playing == P_PAUSE_MP3)drmp3_uninit(&mymp3);
 	if (was_playing == P_FLAC || was_playing == P_PAUSE_FLAC)FreeMemorySafe((void**)&myflac);
@@ -1206,6 +1205,7 @@ extern "C" void beep(int duration, float freq) {
 	CurrentlyPlaying = P_TONE;
 }
 void cmd_play(void) {
+	if (noaudio)return;
     unsigned char* tp;
     if (checkstring(cmdline, (unsigned char *)"STOP")) {
         CloseAudio(1);

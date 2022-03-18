@@ -289,7 +289,8 @@ extern "C" void InitBasic(void) {
     cmdFOR = GetCommandValue((unsigned char*)"For");
     cmdNEXT = GetCommandValue((unsigned char*)"Next");
     cmdIRET = GetCommandValue((unsigned char*)"IReturn");
- //       PInt(CommandTableSize);
+    cmdCSUB = GetCommandValue((unsigned char*)"CSub");
+    //       PInt(CommandTableSize);
  //       MMPrintString((char*)",");
  //       PInt(TokenTableSize);
  //       MMPrintString((char *)"\r\n");
@@ -457,10 +458,9 @@ void error(char* msg, ...) {
         SetFont(PromptFont);
         gui_fcolour = PromptFC;
         gui_bcolour = PromptBC;
-        if (CurrentX != 0) MMErrorString((char *)"\r\n");                   // error message should be on a new line
     }
 
-    if (MMCharPos > 1 && !OptionErrorSkip) MMErrorString((char*)"\r\n");
+//    if (MMCharPos > 1 && !OptionErrorSkip) MMErrorString((char*)"\r\n");
     if (CurrentLinePtr) {
         tp = p = (unsigned char*)ProgMemory;
         if (*CurrentLinePtr != T_NEWLINE && CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) {
@@ -484,7 +484,7 @@ void error(char* msg, ...) {
         llist(tknbuf, CurrentLinePtr);
         p = tknbuf; skipspace(p);
         if (CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) {
-            if (MMCharPos > 1)MMErrorString((char*)"\r\n");
+//            if (MMCharPos > 1)MMErrorString((char*)"\r\n");
             MMErrorString((char*)"Error in ");
             char* ename;
             if ((cpos = strchr((char*)tknbuf, '|')) != NULL) {
@@ -834,6 +834,26 @@ unsigned char *getvalue(unsigned char* p, MMFLOAT* fa, long long int* ia, unsign
     if (*p >= C_BASETOKEN) { //don't waste time if not a built-in function
     // special processing for the NOT operator
     // just get the next value and invert its logical value
+        if (tokenfunction(*p) == op_inv) {
+            int ro;
+            uint64_t ut;
+            p++; t = T_NOTYPE;
+            p = getvalue(p, &f, &i64, &s, &ro, &t);                     // get the next value
+            if (t & T_NBR)
+                i64 = FloatToInt64(f);
+            else if (!(t & T_INT))
+                error((char*)"Expected a number");
+            ut = ~(uint64_t)i64;
+            i64 = (int64_t)ut;
+            t = T_INT;
+            skipspace(p);
+            *fa = f;                                                    // save what we have
+            *ia = i64;
+            *sa = s;
+            *ta = t;
+            *oo = ro;
+            return p;                                                   // return straight away as we already have the next operator
+        }
         if (tokenfunction(*p) == op_not) {
             int ro;
             p++; t = T_NOTYPE;
@@ -852,24 +872,7 @@ unsigned char *getvalue(unsigned char* p, MMFLOAT* fa, long long int* ia, unsign
             *oo = ro;
             return p;                                                   // return straight away as we already have the next operator
         }
-        if (tokenfunction(*p) == op_inv) {
-            int ro;
-            p++; t = T_NOTYPE;
-            p = getvalue(p, &f, &i64, &s, &ro, &t);                     // get the next value
-            if (t & T_NBR)
-                i64 = FloatToInt64(f);
-            else if (!(t & T_INT))
-                error((char*)"Expected a number");
-            i64 = ~i64;
-            t = T_INT;
-            skipspace(p);
-            *fa = f;                                                    // save what we have
-            *ia = i64;
-            *sa = s;
-            *ta = t;
-            *oo = ro;
-            return p;                                                   // return straight away as we already have the next operator
-        }
+
 
         // special processing for the unary - operator
     // just get the next value and negate it
@@ -2290,6 +2293,9 @@ void  tokenise(int console) {
     STR_REPLACE((char*)inpbuf, "MM.FONTHEIGHT", "MM.INFO(FONTHEIGHT)");
     STR_REPLACE((char*)inpbuf, "MM.FONTWIDTH", "MM.INFO(FONTWIDTH)");
     STR_REPLACE((char*)inpbuf, "TOUCH(", "MOUSE(");
+    STR_REPLACE((char*)inpbuf, "BIN$(", "BASE$(2,");
+    STR_REPLACE((char*)inpbuf, "OCT$(", "BASE$(8,");
+    STR_REPLACE((char*)inpbuf, "HEX$(", "BASE$(16,");
 
     // setup the input and output buffers
     p = inpbuf;
@@ -2656,6 +2662,8 @@ extern "C" void ClearRuntime(void) {
     m_alloc(M_VAR);
     ClearVars(0);
     varcnt = 0;
+    memset(datastore, 0, sizeof(struct sa_data) * MAXRESTORE);
+    restorepointer = 0;
 // Clear down all the interrupts
     InterruptUsed = 0;
     GuiIntDownVector = NULL;
@@ -2736,6 +2744,7 @@ extern "C" void ClearProgram(void) {
     InitHeap();
     m_alloc(M_PROG);                                           // init the variables for program memory
     ClearRuntime();
+    memset(ProgMemory, 0xFF, MAX_PROG_SIZE);
     ProgMemory[0] = ProgMemory[1] = ProgMemory[3] = ProgMemory[4] = 0;
     PSize = 0;
     StartEditPoint = NULL;
@@ -2900,7 +2909,7 @@ void hashlabels(int ErrAbort) {
 // This scans one area (main program or the library area) for user defined subroutines and functions.
 // It is only used by PrepareProgram() above.
 int  PrepareProgramExt(unsigned char* p, int i, unsigned char** CFunPtr, int ErrAbort) {
-//    unsigned int* cfp;
+    unsigned int* cfp;
     while (*p != 0xff) {
         p = GetNextCommand(p, &CurrentLinePtr, NULL);
         if (*p == 0) break;                                          // end of the program or module
@@ -2922,16 +2931,21 @@ int  PrepareProgramExt(unsigned char* p, int i, unsigned char** CFunPtr, int Err
     while (*p == 0) p++;                                             // the end of the program can have multiple zeros
     p++;                                                            // step over the terminating 0xff
     *CFunPtr = (unsigned char*)(((unsigned int)p + 0b11) & ~0b11); // CFunction flash (if it exists) starts on the next word address after the program in flash
+    
     if (i < MAXSUBFUN) subfun[i] = NULL;
     CurrentLinePtr = NULL;
     // now, step through the CFunction area looking for fonts to add to the font table
-/*   cfp = *(unsigned int**)CFunPtr;
-    while (*cfp != 0xffffffff) {
-        if (*cfp < FONT_TABLE_SIZE)
+    cfp = *(unsigned int**)CFunPtr;
+    int ji = 0;
+    while (*cfp != 0xffffffff && (uint32_t)cfp< (uint32_t)ProgMemory+MAX_PROG_SIZE-256) {
+        if (*cfp>0 && *cfp < FONT_TABLE_SIZE) {
+//            PInt((uint32_t)*cfp);
             FontTable[*cfp] = (unsigned char*)(cfp + 2);
+//            PIntHC((uint32_t)FontTable[*cfp]); PRet();
+        }
         cfp++;
         cfp += (*cfp + 4) / sizeof(unsigned int);
-    }*/
+    }
     return i;
 }
 
@@ -2948,7 +2962,7 @@ extern "C" void  PrepareProgram(int ErrAbort) {
 
 
     NbrFuncts = 0;
-    CFunctionFlash = CFunctionLibrary = NULL;
+    CFunctionFlash = NULL;
     memset(funtbl, 0, sizeof(struct s_funtbl) * MAXSUBFUN);
     PrepareProgramExt(ProgMemory, NbrFuncts, &CFunctionFlash, ErrAbort);
 

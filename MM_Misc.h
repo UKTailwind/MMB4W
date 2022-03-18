@@ -42,7 +42,6 @@ void cmd_cpu(void);
 void cmd_cfunction(void);
 void cmd_longString(void);
 void cmd_sort(void);
-void cmd_csubinterrupt(void);
 void cmd_test(void);
 void fun_timer(void);
 void fun_date(void);
@@ -96,6 +95,8 @@ void fun_json(void);
 { (unsigned char*)"Mouse",			T_CMD,				0, cmd_mouse },
 { (unsigned char*)"Poke",			T_CMD,				0, cmd_poke },
 { (unsigned char*)"Restart",        T_CMD,				0, cmd_restart },
+{ (unsigned char*)"CSub",           T_CMD,              0, cmd_cfunction },
+{ (unsigned char*)"End CSub",       T_CMD,              0, cmd_null },
 #endif
 
 
@@ -151,10 +152,11 @@ extern volatile int MouseFoundLeftUp, MouseLeftUp;
 extern unsigned char* MouseInterrupRightDown;
 extern volatile int MouseFoundRightDown, MouseRightDown;
 extern volatile int MouseDouble;
+extern int64_t fasttimerat0;
 extern int VideoMode;
 extern int ConsoleRepeat;
 extern MMFLOAT optionangle;
 extern int optiony;
 extern int64_t lasttimer;
-
+extern bool OptionConsoleSerial;
 #endif

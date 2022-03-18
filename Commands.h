@@ -197,10 +197,14 @@ struct s_dostack {
     unsigned char* doptr;                            // pointer to the DO statement
     unsigned char level;                             // the sub/function level that the loop was created
 };
-
+typedef struct sa_data {
+    unsigned char* SaveNextDataLine;
+    int SaveNextData;
+} a_data;
+extern sa_data datastore[MAXRESTORE];
 extern struct s_dostack dostack[MAXDOLOOPS];
 extern int doindex;
-
+extern int restorepointer;
 extern unsigned char* gosubstack[MAXGOSUB];
 extern unsigned char* errorstack[MAXGOSUB];
 extern int gosubindex;
@@ -211,6 +215,7 @@ extern unsigned char DimUsed;
 extern void ListProgram(unsigned char* p, int all);
 extern unsigned char* llist(unsigned char* b, unsigned char* p);
 extern  "C" unsigned char* CheckIfTypeSpecified(unsigned char* p, int* type, int AllowDefaultType);
+extern "C" int strcasecmp(const char* s1, const char* s2);
 extern int MMerrno;
 extern char *MMErrMsg;
 // definitions related to setting video off and on
