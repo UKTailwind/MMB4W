@@ -41,10 +41,11 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "upng.h"
 #include "Shlwapi.h"
 
-extern "C" uint8_t BMP_bDecode(int x, int y, int fnbr);
+extern "C" uint8_t BMP_bDecode(int x, int y, int fnbr); 
 void tidypath(char* p, char* qq);
 int dirflags;
 union uFileTable FileTable[MAXOPENFILES + 1]={0};
+bool FileWrite[MAXOPENFILES + 1] = { 0 };
 int OptionFileErrorAbort = true;
 static uint32_t g_nInFileSize;
 static uint32_t g_nInFileOfs;
@@ -168,18 +169,24 @@ void MMfopen(char* fname, char* mode, int32_t fnbr) {
     // append+update but will allow writing
     if (*mode == 'x') {
         FileTable[fnbr].fptr = fopen(fname, "rb+");
+        FileWrite[fnbr] = 0;
         if (FileTable[fnbr].fptr == NULL) {
             errno = 0;
             FileTable[fnbr].fptr = fopen(fname, "wb+");
+            FileWrite[fnbr] = 1;
         }
         fseek(FileTable[fnbr].fptr, 0, SEEK_END);
     }
-    else
+    else {
+        if (*mode == 'w')FileWrite[fnbr] = 1;
+        else FileWrite[fnbr] = 0;
         FileTable[fnbr].fptr = fopen(fname, mode);
+    }
 
 
     if (FileTable[fnbr].fptr == NULL) {
         FileTable[fnbr].fptr = 0;
+        FileWrite[fnbr] = 0;
         error((char *)"Failed to open file $", fname);
     }
 }
@@ -277,6 +284,7 @@ extern "C" void FileClose(int fnbr) {
     errno = 0;
     fclose(FileTable[fnbr].fptr);
     FileTable[fnbr].fptr = NULL;
+    FileWrite[fnbr] = 0;
     FreeMemory((unsigned char*)FileTable[fnbr].fptr);
     ErrorCheck();
 }
@@ -297,7 +305,9 @@ extern "C" int32_t MMfeof(int32_t fnbr) {
     if (FileTable[fnbr].fptr== NULL) error((char*)"File number % is not open", fnbr);
     if ((uint32_t)FileTable[fnbr].fptr > MAXCOMPORTS) {
         errno = 0;
-        fflush(FileTable[fnbr].fptr);
+        if (FileWrite[fnbr]) {
+            fflush(FileTable[fnbr].fptr);
+        }
         c = fgetc(FileTable[fnbr].fptr);										// the Watcom compiler will only set eof after it has tried to read beyond the end of file
         i = (feof(FileTable[fnbr].fptr) != 0) ? -1 : 0;
         ungetc(c, FileTable[fnbr].fptr);										// undo the Watcom bug fix
@@ -1317,6 +1327,7 @@ void cmd_files(void) {
     ListDirectoryContents((const char*)path, (const char*)filename, sortorder);
 }
 void fun_cwd(void) {
+    sret = (unsigned char*)GetTempMemory(STRINGSIZE);                                      // this will last for the life of the command
     MMerrno = 0;
     targ = T_STR;
     sret = CtoM((unsigned char *)MMgetcwd());
@@ -1803,7 +1814,8 @@ void fun_dir(void) {
         hFind = NULL;
     }
     found_it:
-    if (found_OK)strcpy((char *)sret, (const char *)fdFile.cFileName);
+    if (found_OK)strcpy((char*)sret, (const char*)fdFile.cFileName);
+    else sret[0] = 0;
     CtoM(sret);                                                     // convert to a MMBasic style string
     targ = T_STR;
 }
@@ -2079,6 +2091,9 @@ void cmd_system(void) {
                     }
                 }
             }
+            i--;
+            p = &q[i];
+            while (q[i] == '\r' || q[i] == '\n')i--;
             src[0] = i;
             _pclose(system_file);
         } else if (vartbl[VarIndex].type & T_STR) {
@@ -2100,6 +2115,9 @@ void cmd_system(void) {
                     }
                 }
             }
+            i--;
+            p = &q[i];
+            while (q[i] == '\r' || q[i] == '\n')i--;
             q[0] = i;
             _pclose(system_file);
         } else error((char*)"Syntax");

@@ -522,7 +522,7 @@ void cmd_font(void) {
 void cmd_timer(void) {
     while (*cmdline && tokenfunction(*cmdline) != op_equal) cmdline++;
     if (!*cmdline) error((char *)"Syntax");
-    int64_t offset= getinteger(++cmdline) * frequency / 1000;
+    int64_t offset= getinteger(++cmdline) * (frequency / 1000);
     QueryPerformanceCounter((LARGE_INTEGER*)&fasttimerat0);
     fasttimerat0 -= offset;
 }
@@ -1005,7 +1005,6 @@ void cmd_option(void) {
     }
     tp = checkstring(cmdline, (unsigned char*)"CONSOLE SCREEN");
     if (tp) {
-//        if (!CurrentLinePtr) error((char*)"Only valid in a program");
         OptionConsoleSerial = false; ConsoleRepeat = 0;  return;
     }
     tp = checkstring(cmdline, (unsigned char*)"CONSOLE SERIAL");

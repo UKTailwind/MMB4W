@@ -2540,6 +2540,68 @@ extern "C" int strncasecmp(const char* s1, const char* s2, size_t n)
     }
     return 0;
 }
+// count the number of lines up to and including the line pointed to by the argument
+// used for error reporting in programs that do not use line numbers
+extern "C" int TraceLines(char* target) {
+    char* p;
+    int i, cnt;
+
+    p = (char*)ProgMemory;
+    cnt = 0;
+    if (target == NULL)return cnt;
+    while (1) {
+        if (*p == 0xff || (p[0] == 0 && p[1] == 0))                   // end of the program
+            return cnt;
+
+        if (*p == T_NEWLINE) {
+            p++;                                                 // and step over the line number
+            if (p >= target) {
+                char buf[STRINGSIZE], buff[10];
+                char* ename, * cpos = NULL;
+                memcpy(buf, p, STRINGSIZE);
+                i = 0;
+                while (!(buf[i] == 0 && buf[i + 1] == 0))i++;
+                while (i > 0) {
+                    if (buf[i] == '|')cpos = &buf[i];
+                    i--;
+                }
+                if (cpos != NULL) {
+                    MMPrintString((char *)"[");
+                    if ((ename = strchr(cpos, ',')) != NULL) {
+                        *ename = 0;
+                        cpos++;
+                        ename++;
+                        MMPrintString(cpos);
+                        MMPrintString((char*)":");
+                        MMPrintString(ename);
+                    }
+                    else {
+                        cpos++;
+                        IntToStr(buff, atoi(cpos), 10);
+                        MMPrintString(buff);
+                    }
+                    MMPrintString((char*)"] ");
+                }
+            }
+            continue;
+        }
+
+        if (*p == T_LINENBR) {
+            p += 3;                                                 // and step over the line number
+            continue;
+        }
+
+        if (*p == T_LABEL) {
+            p += p[0] + 2;                                          // still looking! skip over the label
+            continue;
+        }
+
+        if (p++ > target) return cnt;
+
+    }
+}
+
+
 // run a program
 // this will continuously execute a program until the end (marked by TWO zero chars)
 // the argument p must point to the first line to be executed
@@ -2554,10 +2616,33 @@ extern "C" void ExecuteProgram(unsigned char* p) {
             TraceBuff[TraceBuffIndex] = p;                          // used by TRACE LIST
             if (++TraceBuffIndex >= TRACE_BUFF_SIZE) TraceBuffIndex = 0;
             if (TraceOn && p < ProgMemory + MAX_PROG_SIZE) {
-                inpbuf[0] = '[';
-                IntToStr((char *)inpbuf + 1, CountLines(p), 10);
-                strcat((char *)inpbuf, "]");
-                MMPrintString((char*)inpbuf);
+                char buf[STRINGSIZE], buff[10];
+                MMPrintString((char*)"[");
+                memcpy(buf, p, STRINGSIZE);
+                char* ename, * cpos = NULL;
+                i = 0;
+                while (!(buf[i] == 0 && buf[i + 1] == 0))i++;
+                while (i > 0) {
+                    if (buf[i] == '|')cpos = &buf[i];
+                    i--;
+                }
+                if (cpos != NULL) {
+                    if ((ename = strchr(cpos, ',')) != NULL) {
+                        *ename = 0;
+                        cpos++;
+                        ename++;
+                        if (*cpos == '\'')cpos++;
+                        MMPrintString(cpos);
+                        MMPrintString((char*)":");
+                        MMPrintString(ename);
+                    }
+                    else {
+                        cpos++;
+                        IntToStr(buff, atoi(cpos), 10);
+                        MMPrintString(buff);
+                    }
+                }
+                MMPrintString((char *)"]");
                 uSec(1000);
             }
             p++;                                                    // and step over the token
@@ -2627,9 +2712,6 @@ extern "C" void ExecuteProgram(unsigned char* p) {
 void  ClearStack(void) {
     NextData = 0;
     NextDataLine = ProgMemory;
-    SaveNextDataLine = ProgMemory;
-    SaveNextData = 0;
-
     forindex = 0;
     doindex = 0;
     gosubindex = 0;
@@ -2687,6 +2769,8 @@ extern "C" void ClearRuntime(void) {
     CloseAudio(1);
     keyselect = 0;
     ResetGUI();
+    for (i = 0; i < TRACE_BUFF_SIZE; i++)TraceBuff[i] = 0;
+    TraceBuffIndex = 0;
 }
 
 

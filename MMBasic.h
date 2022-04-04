@@ -148,6 +148,7 @@ extern "C" int mem_equal(unsigned char* s1, unsigned char* s2, int i);
 extern "C" unsigned char* getclosebracket(unsigned char* p);
 extern "C" int strncasecmp(const char* s1, const char* s2, size_t n);
 extern "C" int str_equal(const unsigned char* s1, const unsigned char* s2);
+extern "C" int TraceLines(char* target);
 extern unsigned char inpbuf[];                                            // used to store user keystrokes until we have a line
 extern unsigned char tknbuf[];                                            // used to store the tokenised representation of the users input line
 extern MMFLOAT farg1, farg2, fret;                // Global floating point variables used by operators

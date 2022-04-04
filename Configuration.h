@@ -65,7 +65,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #define CONFIG_LOWER		1
 #define CONFIG_UPPER		2
 #define VCHARS				25					// nbr of lines in the DOS box (used in LIST)
-#define MAXMODES			19
+#define MAXMODES			20
 #define MAXCTRLS			1000
 #define RESET_COMMAND       9999                                // indicates that the reset was caused by the RESET command
 #define WATCHDOG_TIMEOUT    9998                                // reset caused by the watchdog timer

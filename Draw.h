@@ -55,6 +55,7 @@ void cmd_framebuffer(void);
 void cmd_image(void);
 void cmd_3D(void);
 void cmd_turtle(void);
+void cmd_clut(void);
 
 void fun_rgb(void);
 void fun_mmhres(void);
@@ -64,6 +65,7 @@ void fun_mmcharheight(void);
 void fun_at(void);
 void fun_pixel(void);
 void fun_3D(void);
+void fun_clut(void);
 
 #endif
 
@@ -103,6 +105,8 @@ void fun_3D(void);
 { (unsigned char*)"Image",	 		T_CMD,						0, cmd_image },
 { (unsigned char*)"Draw3D",         T_CMD,                      0, cmd_3D },
 { (unsigned char*)"Turtle",			T_CMD,						0, cmd_turtle },
+{ (unsigned char*)"Map(",	 		T_CMD | T_FUN,				0, cmd_clut },
+{ (unsigned char*)"Map",	 		T_CMD,						0, cmd_clut },
 #endif
 
 
@@ -121,6 +125,7 @@ void fun_3D(void);
 	{ (unsigned char*)"MM.VRes",	    	T_FNA | T_INT,		0, fun_mmvres },
 	{ (unsigned char*)"@(",					T_FUN | T_STR,		0, fun_at },
 	{ (unsigned char*)"DRAW3D(",	    T_FUN | T_INT,		0, fun_3D, },
+	{ (unsigned char*)"Map(",	        T_FUN | T_INT,		0, fun_clut, },
 //	{ (unsigned char *)"MM.FontWidth",   T_FNA | T_INT,		0, fun_mmcharwidth 	},
 //	{ (unsigned char *)"MM.FontHeight",  T_FNA | T_INT,		0, fun_mmcharheight },
 

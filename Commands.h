@@ -235,7 +235,5 @@ extern int TraceBuffIndex;                                          // used for 
 extern int OptionErrorSkip;
 extern char *MMErrMsg;
 extern char runcmd[STRINGSIZE];
-extern unsigned char* SaveNextDataLine;
-extern int SaveNextData;
 
 #endif

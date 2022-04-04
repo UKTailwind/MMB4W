@@ -36,8 +36,6 @@ unsigned char* KeyInterrupt = NULL;
 volatile int Keycomplete = 0;
 int keyselect = 0;
 char runcmd[STRINGSIZE] = { 0 };
-unsigned char* SaveNextDataLine = ProgMemory;
-int SaveNextData = 0;
 
 
 // stack to keep track of nested FOR/NEXT loops
@@ -1272,29 +1270,27 @@ void cmd_input(void) {
 
 
 void cmd_trace(void) {
-	if(checkstring(cmdline, (unsigned char*)"ON"))
+	if (checkstring(cmdline, (unsigned char *)"ON"))
 		TraceOn = true;
-	else if(checkstring(cmdline, (unsigned char*)"OFF"))
+	else if (checkstring(cmdline, (unsigned char*)"OFF"))
 		TraceOn = false;
-	else if(checkstring(cmdline, (unsigned char*)"LIST")) {
+	else if (checkstring(cmdline, (unsigned char*)"LIST")) {
 		int i;
 		cmdline += 4;
 		skipspace(cmdline);
-		if(*cmdline == 0 || *cmdline == (unsigned char)'\'')  //'
+		if (*cmdline == 0 || *cmdline == '\'')  //'
 			i = TRACE_BUFF_SIZE - 1;
 		else
 			i = (int)getint(cmdline, 0, TRACE_BUFF_SIZE - 1);
 		i = TraceBuffIndex - i;
-		if(i < 0) i += TRACE_BUFF_SIZE;
+		if (i < 0) i += TRACE_BUFF_SIZE;
 		while (i != TraceBuffIndex) {
-			inpbuf[0] = '[';
-			IntToStr((char *)(inpbuf + 1), CountLines(TraceBuff[i]), 10);
-			strcat((char*)inpbuf, "]");
-			MMPrintString((char*)inpbuf);
-			if(++i >= TRACE_BUFF_SIZE) i = 0;
+			TraceLines((char *)TraceBuff[i]);
+			if (++i >= TRACE_BUFF_SIZE) i = 0;
 		}
 	}
-	else error((char *)"Unknown command");
+	else
+		error((char *)"Unknown command");
 }
 
 
