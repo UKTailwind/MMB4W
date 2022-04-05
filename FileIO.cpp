@@ -2094,7 +2094,7 @@ void cmd_system(void) {
             i--;
             p = &q[i];
             while (q[i] == '\r' || q[i] == '\n')i--;
-            src[0] = i;
+            src[0] = i+1;
             _pclose(system_file);
         } else if (vartbl[VarIndex].type & T_STR) {
             if (vartbl[VarIndex].dims[0] > 0) {		// Not an array
