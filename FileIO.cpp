@@ -394,11 +394,11 @@ void importfile(unsigned char* path, unsigned char* filename, unsigned char** p,
     strcpy(qq, fname);
     for (int i = 0; i < (int)strlen(qq); i++) if(qq[i] == '/')qq[i] = '\\';
     if (!(qq[1] == ':' || qq[0] == '\\')) { //filename is relative path to "path"
-        char q[STRINGSIZE] = { 0 };
+        char q[STRINGSIZE*2] = { 0 };
         strcpy(q, (char *)path);
         if (path[strlen(q) - 1] != '\\')strcat(q, "\\");
         strcat(q, qq);
-        PathCanonicalizeA(qq, q);
+        if(PathCanonicalizeA(qq, q)==false)error((char *)"Invalid pathname");
     }
     f = strlen(qq);
     if (strchr((char*)qq, '.') == NULL) strcat((char*)qq, (char *)"INC");
@@ -1263,17 +1263,18 @@ extern "C" void tidypath(char* p, char* qq) {
     strcpy(qq, p);
     for (int i = 0; i < (int)strlen(qq); i++)if (qq[i] == '/')qq[i] = '\\';
     if (!(qq[1] == ':' || qq[0] == '\\')) {
-        char q[STRINGSIZE] = { 0 };
+        char q[STRINGSIZE*2] = { 0 };
         strcpy(q, MMgetcwd());
         strcat(q, "\\");
         strcat(q, qq);
-        PathCanonicalizeA(qq, q);
+        if(strlen(q)>=MAX_PATH)error((char*)"Pathname too long");
+        if(PathCanonicalizeA(qq, q)==false)error((char *)"Invalid pathname");
 //        if (qq[strlen(qq) - 1] != '\\')strcat(qq, "\\");
     }
 }
 extern "C" void tidyfilename(char* p, char* path, char* filename, int search) {
-    char q[STRINGSIZE] = { 0 };
-    char r[STRINGSIZE] = { 0 };
+    char q[STRINGSIZE*2] = { 0 };
+    char r[STRINGSIZE*2] = { 0 };
     strcpy(q, p);
     for (int i = 0; i < (int)strlen(q); i++)if (q[i] == '/')q[i] = '\\';
     int i = strlen(q) - 1;
@@ -1291,9 +1292,9 @@ extern "C" void tidyfilename(char* p, char* path, char* filename, int search) {
     strcpy(filename, &p[i]);
 }
 extern "C" void fullfilename(char* infile, char* outfile, const char * extension) {
-    char q[STRINGSIZE] = { 0 };
-    char filename[STRINGSIZE] = { 0 };
-    char path[STRINGSIZE] = { 0 };
+    char q[STRINGSIZE*2] = { 0 };
+    char filename[STRINGSIZE*2] = { 0 };
+    char path[STRINGSIZE*2] = { 0 };
     strcpy(q, infile);
     tidyfilename(q, path, filename,0);
     strcpy(q, path);

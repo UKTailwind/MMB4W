@@ -744,7 +744,8 @@ void cmd_option(void) {
         char path[STRINGSIZE] = { 0 };
         p = (char*)getCstring(tp);	
         tidypath(p, path);
-        if (!dirExists((const char*)path)) error((char*)"Directory does not exist");// get the directory name and convert to a standard C string
+        if (strlen(path) > 255)error((char *)"Pathname too long");
+        if (!dirExists((const char*)path)) error((char*)"Directory $ does not exist",path);// get the directory name and convert to a standard C string
         i = (int)SetCurrentDirectoryA(path);
         if (i == 0) {
             j = GetLastError();
@@ -764,7 +765,8 @@ void cmd_option(void) {
         char path[STRINGSIZE] = { 0 };
         p = (char*)getCstring(tp);
         tidypath(p, path);
-        if (!dirExists((const char*)path)) error((char*)"Directory does not exist");// get the directory name and convert to a standard C string
+        if (strlen(path) > 255)error((char*)"Pathname too long");
+        if (!dirExists((const char*)path)) error((char*)"Directory $ does not exist",path);// get the directory name and convert to a standard C string
         strcpy(Option.searchpath, (const char*)path);
         if (!(Option.searchpath[strlen(Option.searchpath) - 1] == '\\'))strcat(Option.searchpath, "\\");
         Option.searchpath[0] = toupper(Option.searchpath[0]);

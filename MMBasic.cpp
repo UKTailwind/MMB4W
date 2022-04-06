@@ -392,7 +392,7 @@ extern "C" void IntToStrPad(char* p, long long int nbr, signed char padch, int m
     char sign, buf[IntToStrBufSize];
 
     sign = 0;
-    if ((nbr < 0 && radix == 10) || padch < 0) {                      // if the number is negative or we are forced to use a - symbol
+    if ((nbr < 0 && radix == 10 && nbr!=0x8000000000000000) || padch < 0) {                      // if the number is negative or we are forced to use a - symbol
         sign = '-';                                                 // set the sign
         nbr *= -1;                                                  // convert to a positive nbr
         padch = abs(padch);

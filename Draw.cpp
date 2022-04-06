@@ -2290,6 +2290,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
     void CalcLine(int x1, int y1, int x2, int y2, short* xmin, short* xmax) {
 
         if (y1 == y2) {
+            if (y1 < 0)y1 = 0;
+            if (y1 >= 2160)y1 = 2159;
             if (x1 < xmin[y1])xmin[y1] = x1;
             if (x2 < xmin[y1])xmin[y1] = x2;
             if (x1 > xmax[y1])xmax[y1] = x1;
@@ -2298,6 +2300,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         }
         if (x1 == x2) {
             if (y2 < y1)std::swap(y2, y1);
+            if (y1 < 0)y1 = 0;
+            if (y2 >= 2160)y1 = 2159;
             for (int y = y1; y <= y2; y++) {
                 if (x1 < xmin[y])xmin[y] = x1;
                 if (x1 > xmax[y])xmax[y] = x1;
@@ -2310,6 +2314,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             std::swap(y1, y2);
             std::swap(x1, x2);
         }
+        if (y1 < 0)y1 = 0;
+        if (y2 >= 2160)y1 = 2159;
         int absX = ABS(x1 - x2);          // absolute value of coordinate distances
         int absY = ABS(y1 - y2);
         int offX = x2 < x1 ? 1 : -1;      // line-drawing direction offsets
