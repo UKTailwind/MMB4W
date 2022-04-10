@@ -50,6 +50,7 @@ const char* daystrings[] = { "dummy","Monday","Tuesday","Wednesday","Thursday","
 const char* CaseList[] = { "", "LOWER", "UPPER" };
 const char* KBrdList[] = { "", "US", "FR", "DE", "IT", "BE", "UK", "ES" };
 unsigned char* OnKeyGOSUB = NULL;
+int SaveOptionErrorSkip = 0; 
 int64_t fasttimerat0;
 MMFLOAT optionangle = 1.0;
 int optiony = 0;
@@ -306,6 +307,9 @@ extern "C" int check_interrupt(void) {
     return 0;
 GotAnInterrupt:
     LocalIndex++;                                                   // IRETURN will decrement this
+    if (OptionErrorSkip > 0)SaveOptionErrorSkip = OptionErrorSkip;
+    else SaveOptionErrorSkip = 0;
+    OptionErrorSkip = 0;
     InterruptReturn = nextstmt;                                     // for when IRETURN is executed
     // if the interrupt is pointing to a SUB token we need to call a subroutine
     if (*intaddr == cmdSUB) {
@@ -356,6 +360,7 @@ void cmd_ireturn(void) {
         DrawFmtBox(1);                                              // the pop-up GUI keyboard should be drawn AFTER the pen down interrupt
         DelayedDrawFmtBox = false;
     }
+    if (SaveOptionErrorSkip > 0)OptionErrorSkip = SaveOptionErrorSkip + 1;
 }
 // remove unnecessary text
 void CrunchData(unsigned char** p, int c) {
@@ -764,6 +769,11 @@ void cmd_option(void) {
         DWORD j = 0;
         char path[STRINGSIZE] = { 0 };
         p = (char*)getCstring(tp);
+        if (!strlen(p)) {
+            memset(Option.searchpath, 0, sizeof(Option.searchpath));
+            SaveOptions();
+            return;
+        }
         tidypath(p, path);
         if (strlen(path) > 255)error((char*)"Pathname too long");
         if (!dirExists((const char*)path)) error((char*)"Directory $ does not exist",path);// get the directory name and convert to a standard C string

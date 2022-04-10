@@ -178,7 +178,7 @@ void MMfopen(char* fname, char* mode, int32_t fnbr) {
         fseek(FileTable[fnbr].fptr, 0, SEEK_END);
     }
     else {
-        if (*mode == 'w')FileWrite[fnbr] = 1;
+        if (*mode == 'w' || *mode =='a')FileWrite[fnbr] = 1;
         else FileWrite[fnbr] = 0;
         FileTable[fnbr].fptr = fopen(fname, mode);
     }
