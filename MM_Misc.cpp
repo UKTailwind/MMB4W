@@ -51,6 +51,8 @@ const char* CaseList[] = { "", "LOWER", "UPPER" };
 const char* KBrdList[] = { "", "US", "FR", "DE", "IT", "BE", "UK", "ES" };
 unsigned char* OnKeyGOSUB = NULL;
 int SaveOptionErrorSkip = 0; 
+char SaveErrorMessage[MAXERRMSG] = { 0 };
+int Saveerrno = 0;
 int64_t fasttimerat0;
 MMFLOAT optionangle = 1.0;
 int optiony = 0;
@@ -310,6 +312,10 @@ GotAnInterrupt:
     if (OptionErrorSkip > 0)SaveOptionErrorSkip = OptionErrorSkip;
     else SaveOptionErrorSkip = 0;
     OptionErrorSkip = 0;
+    strcpy(SaveErrorMessage , MMErrMsg);
+    Saveerrno = MMerrno;
+    *MMErrMsg = NULL;
+    MMerrno = 0;
     InterruptReturn = nextstmt;                                     // for when IRETURN is executed
     // if the interrupt is pointing to a SUB token we need to call a subroutine
     if (*intaddr == cmdSUB) {
@@ -361,6 +367,8 @@ void cmd_ireturn(void) {
         DelayedDrawFmtBox = false;
     }
     if (SaveOptionErrorSkip > 0)OptionErrorSkip = SaveOptionErrorSkip + 1;
+    strcpy(MMErrMsg , SaveErrorMessage);
+    MMerrno = Saveerrno;
 }
 // remove unnecessary text
 void CrunchData(unsigned char** p, int c) {
@@ -1379,7 +1387,7 @@ void fun_info(void) {
             return;
         }
         else if (checkstring(ep, (unsigned char *)"ERRMSG")) {
-            if(MMErrMsg)strcpy((char *)sret, MMErrMsg);
+            strcpy((char *)sret, MMErrMsg);
         }
         else if (checkstring(ep, (unsigned char *)"FCOLOUR") || checkstring(ep, (unsigned char *)"FCOLOR")) {
             iret = gui_fcolour;
@@ -1483,6 +1491,7 @@ void fun_day(void) {
     else {
         SYSTEMTIME lt;
         GetLocalTime(&lt);
+        if (lt.wDayOfWeek == 0)lt.wDayOfWeek = 7;
         strcpy((char *)sret, daystrings[lt.wDayOfWeek]);
     }
     CtoM(sret);
@@ -2579,7 +2588,7 @@ void fun_peek(void) {
 
     if ((p = checkstring(argv[0], (unsigned char*)"VAR"))) {
         pp = (unsigned char *)findvar(p, V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
-        iret = *((char*)pp + (int)getinteger(argv[2]));
+        iret = *((unsigned char*)pp + (int)getinteger(argv[2]));
         targ = T_INT;
         return;
     }

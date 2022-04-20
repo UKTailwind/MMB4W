@@ -536,7 +536,7 @@ void error(char* msg, ...) {
         }
         if (!OptionErrorSkip)MMErrorString((char*)"\r\n");
     }
-    MMErrMsg = errstring;
+    strcpy(MMErrMsg , errstring);
     if (OptionErrorSkip) {
         errpos = 0;
         longjmp(ErrNext, 1);
@@ -2739,7 +2739,7 @@ extern "C" void ClearRuntime(void) {
     findlabel(NULL);                                                // clear the label cache
     OptionErrorSkip = 0;
     MMerrno = 0;                                                    // clear the error flags
-    if(MMErrMsg!=NULL)*MMErrMsg = 0;
+    *MMErrMsg = 0;
     InitHeap();
     m_alloc(M_VAR);
     ClearVars(0);

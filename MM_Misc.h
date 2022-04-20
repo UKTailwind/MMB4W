@@ -152,6 +152,7 @@ extern volatile int MouseFoundLeftUp, MouseLeftUp;
 extern unsigned char* MouseInterrupRightDown;
 extern volatile int MouseFoundRightDown, MouseRightDown;
 extern volatile int MouseDouble;
+extern int IntJustDone;
 extern int64_t fasttimerat0;
 extern int VideoMode;
 extern int ConsoleRepeat;

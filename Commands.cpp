@@ -31,7 +31,7 @@ void flist(int, int, int);
 //void clearprog(void);
 void ListNewLine(int* ListCnt, int all);
 void ListProgramFlash(unsigned char* p, int all);
-char *MMErrMsg=NULL;                                           // the error message
+char MMErrMsg[MAXERRMSG];                                           // the error message
 unsigned char* KeyInterrupt = NULL;
 volatile int Keycomplete = 0;
 int keyselect = 0;
@@ -1640,7 +1640,7 @@ void cmd_error(void) {
 	char* s, p[STRINGSIZE];
 	if (*cmdline && *cmdline != '\'') {
 		s = (char *)getCstring(cmdline);
-
+		if (CurrentX != 0) MMPrintString((char*)"\r\n");                   // error message should be on a new line
 		strcpy(p, s);
 		error(p);
 	}
@@ -2030,7 +2030,7 @@ void cmd_on(void) {
 			return;
 		}
 		MMerrno = 0;                                                // clear the error flags
-		if(MMErrMsg!=NULL)*MMErrMsg = 0;
+		*MMErrMsg = 0;
 		if (checkstring(p, (unsigned char*)"CLEAR")) return;
 		if (checkstring(p, (unsigned char*)"IGNORE")) {
 			OptionErrorSkip = -1;

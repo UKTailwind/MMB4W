@@ -115,7 +115,7 @@ extern "C" void ResetOptions(void) {
 }
 int32_t ErrorThrow(int32_t e) {
     MMerrno = e;
-    MMErrMsg = (char*)strerror(e);
+    strcpy(MMErrMsg , (char*)strerror(e));
     if (e > 0 && e < 41 && OptionFileErrorAbort) error((char*)strerror(e));
     errno = 0;
     return e;
@@ -1502,7 +1502,7 @@ void cmd_open(void) {
         if (checkstring(argv[2], (unsigned char*)"OUTPUT"))
             mode = (char*)"wb";											// binary mode so that we do not have lf to cr/lf translation
         else if (checkstring(argv[2], (unsigned char*)"APPEND"))
-            mode = (char*)"ab";											// binary mode is used in MMfopen()
+            mode = (char*)"ab+";											// binary mode is used in MMfopen()
         else if (checkstring(argv[2], (unsigned char*)"INPUT"))
             mode = (char*)"rb";											// note binary mode
         else if (checkstring(argv[2], (unsigned char*)"RANDOM"))
@@ -1543,7 +1543,7 @@ void cmd_seek(void) {
     fnbr = (int)getinteger(argv[0]);
     if (fnbr < 1 || fnbr > MAXOPENFILES || FileTable[fnbr].com <= MAXCOMPORTS) error((char*)"File number");
     if (FileTable[fnbr].com == 0) error((char*)"File number #% is not open", fnbr);
-    idx = (int)getinteger(argv[2]) - 1;
+    idx = (int)getint(argv[2],1,0x7FFFFFFF) - 1;
     if (idx < 0) idx = 0;
     errno = 0;
     fseek(FileTable[fnbr].fptr, idx, SEEK_SET);

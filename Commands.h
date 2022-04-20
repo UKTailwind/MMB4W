@@ -217,7 +217,7 @@ extern unsigned char* llist(unsigned char* b, unsigned char* p);
 extern  "C" unsigned char* CheckIfTypeSpecified(unsigned char* p, int* type, int AllowDefaultType);
 extern "C" int strcasecmp(const char* s1, const char* s2);
 extern int MMerrno;
-extern char *MMErrMsg;
+extern char MMErrMsg[MAXERRMSG];
 // definitions related to setting video off and on
 extern const unsigned int CaseOption;
 extern volatile int Keycomplete;
@@ -233,7 +233,7 @@ extern int TraceOn;
 extern unsigned char* TraceBuff[TRACE_BUFF_SIZE];
 extern int TraceBuffIndex;                                          // used for listing the contents of the trace buffer
 extern int OptionErrorSkip;
-extern char *MMErrMsg;
+extern char MMErrMsg[MAXERRMSG];
 extern char runcmd[STRINGSIZE];
 
 #endif
