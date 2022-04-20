@@ -2291,7 +2291,9 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
 
         if (y1 == y2) {
             if (y1 < 0)y1 = 0;
-            if (y1 >= 2160)y1 = 2159;
+            if (y1 >= 1080)y1 = 1079;
+            if (y2 < 0)y2 = 0;
+            if (y2 >= 1080)y2 = 1079;
             if (x1 < xmin[y1])xmin[y1] = x1;
             if (x2 < xmin[y1])xmin[y1] = x2;
             if (x1 > xmax[y1])xmax[y1] = x1;
@@ -2301,7 +2303,9 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         if (x1 == x2) {
             if (y2 < y1)std::swap(y2, y1);
             if (y1 < 0)y1 = 0;
-            if (y2 >= 2160)y1 = 2159;
+            if (y1 >= 1080)y1 = 1079;
+            if (y2 < 0)y2 = 0;
+            if (y2 >= 1080)y2 = 1079;
             for (int y = y1; y <= y2; y++) {
                 if (x1 < xmin[y])xmin[y] = x1;
                 if (x1 > xmax[y])xmax[y] = x1;
@@ -2315,7 +2319,9 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             std::swap(x1, x2);
         }
         if (y1 < 0)y1 = 0;
-        if (y2 >= 2160)y1 = 2159;
+        if (y1 >= 1080)y1 = 1079;
+        if (y2 < 0)y2 = 0;
+        if (y2 >= 1080)y2 = 1079;
         int absX = ABS(x1 - x2);          // absolute value of coordinate distances
         int absY = ABS(y1 - y2);
         int offX = x2 < x1 ? 1 : -1;      // line-drawing direction offsets
@@ -2435,8 +2441,10 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         short* xmin = (short*)linebuff;
         short* xmax = (short*)(linebuff + 2160); //max number of lines is 1080
         for (y = ystart; y <= yend; y++) {
-            xmin[y] = 32767;
-            xmax[y] = -1;
+            if (y >= 0 && y < 1080) {
+                xmin[y] = 32767;
+                xmax[y] = -1;
+            }
         }
 
         for (i = 0; i < main_fill_poly_vertex_count; i++) {
@@ -2448,7 +2456,9 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                 main_fill_poly_vertex_count]);
             CalcLine(x0, y0, x1, y1, xmin, xmax);
         }
-        for (y = ystart; y <= yend; y++)DrawHLineFast(xmin[y], y, xmax[y], Colour);
+        for (y = ystart; y <= yend; y++) {
+            if (y >= 0 && y < 1080)DrawHLineFast(xmin[y], y, xmax[y], Colour);
+        }
         if (f != c) {
             for (i = 0; i < main_fill_poly_vertex_count; i++) {
                 int x0 = (int)(main_fill_polyX[i]);
