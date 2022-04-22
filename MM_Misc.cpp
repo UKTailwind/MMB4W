@@ -2587,6 +2587,7 @@ void fun_peek(void) {
     }
 
     if ((p = checkstring(argv[0], (unsigned char*)"VAR"))) {
+        if (argc != 3) error((char*)"Syntax");
         pp = (unsigned char *)findvar(p, V_FIND | V_EMPTY_OK | V_NOFIND_ERR);
         iret = *((unsigned char*)pp + (int)getinteger(argv[2]));
         targ = T_INT;

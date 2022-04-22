@@ -45,7 +45,7 @@ extern "C" uint8_t BMP_bDecode(int x, int y, int fnbr);
 void tidypath(char* p, char* qq);
 int dirflags;
 union uFileTable FileTable[MAXOPENFILES + 1]={0};
-bool FileWrite[MAXOPENFILES + 1] = { 0 };
+unsigned char FileWrite[MAXOPENFILES + 1] = { 0 };
 int OptionFileErrorAbort = true;
 static uint32_t g_nInFileSize;
 static uint32_t g_nInFileOfs;
@@ -173,12 +173,12 @@ void MMfopen(char* fname, char* mode, int32_t fnbr) {
         if (FileTable[fnbr].fptr == NULL) {
             errno = 0;
             FileTable[fnbr].fptr = fopen(fname, "wb+");
-            FileWrite[fnbr] = 1;
+            FileWrite[fnbr] = 'x';
         }
         fseek(FileTable[fnbr].fptr, 0, SEEK_END);
     }
     else {
-        if (*mode == 'w' || *mode =='a')FileWrite[fnbr] = 1;
+        if (*mode == 'w' || *mode =='a')FileWrite[fnbr] = *mode;
         else FileWrite[fnbr] = 0;
         FileTable[fnbr].fptr = fopen(fname, mode);
     }
@@ -203,6 +203,7 @@ extern "C" int BasicFileOpen(char* fname, int fnbr, char *mode) {
 }
 extern "C" void FilePutStr(int count, char* c, int fnbr) {
     if (fwrite(c, 1, count, FileTable[fnbr].fptr) != count)error((char*)"File write");
+    if(FileWrite[fnbr]!='w')FileWrite[fnbr] = 2;
 }
 
 extern "C" int MMfgetc(int fnbr) {
@@ -232,6 +233,7 @@ extern "C" unsigned char MMfputc(unsigned char c, int fnbr) {
     if(FileTable[fnbr].com == 0) error((char*)"File number is not open");
     if (FileTable[fnbr].com > MAXCOMPORTS) {
         if (fwrite(&c, 1, 1, FileTable[fnbr].fptr) != 1)error((char*)"File write");
+        if (FileWrite[fnbr] != 'w')FileWrite[fnbr] = 2;
     }
     else c = SerialPutchar(FileTable[fnbr].com, c);                   // send the char to the serial port
     return c;
@@ -254,6 +256,7 @@ extern "C" void MMfputs(unsigned char* p, int filenbr) {
     if (FileTable[filenbr].com == 0) error((char*)"File number is not open");
     if (FileTable[filenbr].com > MAXCOMPORTS) {
         if (fwrite(p, 1, i, FileTable[filenbr].fptr) != i)error((char*)"File write");
+        if(FileWrite[filenbr] != 'w')FileWrite[filenbr] = 2;
     }
     else {
         DWORD dNoOfBytesWritten = 0;
@@ -301,16 +304,19 @@ extern "C" int FindFreeFileNbr(void) {
 extern "C" int32_t MMfeof(int32_t fnbr) {
     int32_t i=0, c;
     if (fnbr < 0 || fnbr > MAXOPENFILES) error((char *)"Invalid file number");
-    if (fnbr == 0) return 0;
+    if (fnbr == 0) return -1;
     if (FileTable[fnbr].fptr== NULL) error((char*)"File number % is not open", fnbr);
     if ((uint32_t)FileTable[fnbr].fptr > MAXCOMPORTS) {
         errno = 0;
-        if (FileWrite[fnbr]) {
+        if (FileWrite[fnbr] == 'x' || FileWrite[fnbr] == 'a' || FileWrite[fnbr] == 'w') return -1;
+        if (FileWrite[fnbr]==2) {
+//            MMPrintString((char*)"Flush");
             fflush(FileTable[fnbr].fptr);
         }
-        c = fgetc(FileTable[fnbr].fptr);										// the Watcom compiler will only set eof after it has tried to read beyond the end of file
+//        PInt(FileWrite[fnbr]);
+        if (FileWrite[fnbr] ==2 || FileWrite[fnbr] == 0)c = fgetc(FileTable[fnbr].fptr);										// the Watcom compiler will only set eof after it has tried to read beyond the end of file
         i = (feof(FileTable[fnbr].fptr) != 0) ? -1 : 0;
-        ungetc(c, FileTable[fnbr].fptr);										// undo the Watcom bug fix
+        if (FileWrite[fnbr] == 2 || FileWrite[fnbr] == 0)ungetc(c, FileTable[fnbr].fptr);										// undo the Watcom bug fix
         ErrorCheck();
     }
 /*    else if (OpenFileTable[fnbr] == -1) {
