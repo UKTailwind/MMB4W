@@ -306,17 +306,17 @@ void fun_bin2str(void) {
         }
         else if(checkstring(argv[0], (unsigned char*)"INT32")) {
             len = 4;
-            if(i64 > 2147483647 || i64 < -2147483648)error((char *)"Overflow");
+            if (i64 > 2147483647LL || i64 < -2147483648LL) error((char *)"Overflow");
             map.i = (int32_t)i64;
         }
         else if(checkstring(argv[0], (unsigned char*)"INT16")) {
             len = 2;
-            if(i64 > 32767 || i64 < -32768)error((char *)"Overflow");
+            if (i64 > 32767LL || i64 < -32768LL) error((char *)"Overflow");
             map.s = (int16_t)i64;
         }
         else if(checkstring(argv[0], (unsigned char*)"INT8")) {
             len = 1;
-            if(i64 > 127 || i64 < -128)error((char *)"Overflow");
+            if (i64 > 127LL || i64 < -128LL) error((char *)"Overflow");
             map.c[0] = (int8_t)i64;
         }
         else if(checkstring(argv[0], (unsigned char*)"UINT64")) {
@@ -325,17 +325,17 @@ void fun_bin2str(void) {
         }
         else if(checkstring(argv[0], (unsigned char*)"UINT32")) {
             len = 4;
-            if(i64 > 4294967295 || i64 < 0)error((char *)"Overflow");
+            if (i64 > 4294967295LL || i64 < 0LL) error((char *)"Overflow");
             map.ui = (uint32_t)i64;
         }
         else if(checkstring(argv[0], (unsigned char*)"UINT16")) {
             len = 2;
-            if(i64 > 65535 || i64 < 0)error((char *)"Overflow");
+            if (i64 > 65535LL || i64 < 0LL) error((char *)"Overflow");
             map.us = (uint16_t)i64;
         }
         else if(checkstring(argv[0], (unsigned char*)"UINT8")) {
             len = 1;
-            if(i64 > 255 || i64 < 0)error((char *)"Overflow");
+            if (i64 > 255LL || i64 < 0LL) error((char *)"Overflow");
             map.uc[0] = (uint8_t)i64;
         }
         else error((char *)"Syntax");
