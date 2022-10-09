@@ -1,3 +1,4 @@
+#pragma once
 // font1.c
 // Font type    : Full (223 characters)
 // Font size    : 8x12 pixels

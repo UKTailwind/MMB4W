@@ -95,7 +95,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #define round3d roundf
 #define fabs3d fabsf
 #define MAX_POLYGON_VERTICES 128
-#define POKERANGE(a)   ((a>=(uint32_t)FrameBuffer && a<(uint32_t)FrameBuffer+FRAMEBUFFERSIZE) || (a >= (uint32_t)vartbl && a < (uint32_t)vartbl + MAXVARS * sizeof(s_vartbl)) || (a>=(uint32_t)MMHeap && a< (uint32_t)MMHeap+HEAP_MEMORY_SIZE|| (a>=(uint32_t)ProgMemory && a< (uint32_t)ProgMemory+MAX_PROG_SIZE)))
+#define POKERANGE(a)   ((a>=(uint32_t)FrameBuffer && a<(uint32_t)FrameBuffer+FRAMEBUFFERSIZE) ||   (a >= (uint32_t)FontTable && a < (uint32_t)FontTable + FONT_TABLE_SIZE ) || (a >= (uint32_t)vartbl && a < (uint32_t)vartbl + MAXVARS * sizeof(s_vartbl)) || (a>=(uint32_t)MMHeap && a< (uint32_t)MMHeap+HEAP_MEMORY_SIZE|| (a>=(uint32_t)ProgMemory && a< (uint32_t)ProgMemory+MAX_PROG_SIZE)))
 #define MAXDEFINES			256						// Maximum number of #define in file
 
 #define MES_SIGNON  "\rWindows MMBasic Version " VERSION "\r\n"\
