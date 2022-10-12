@@ -537,7 +537,6 @@ int FileLoadProgram(unsigned char* fn, int mode) {
     int fnbr, size = 0;
     char* p, * op, * ip, * buf, * sbuff, name[STRINGSIZE] = { 0 }, buff[STRINGSIZE];
     char path[STRINGSIZE] = { 0 };
-    char pp[STRINGSIZE] = { 0 };
     char num[10];
     int c;
     int convertdebug = 1;
@@ -581,7 +580,6 @@ int FileLoadProgram(unsigned char* fn, int mode) {
     strcpy(lastfileedited, buff);
     strcpy(Option.lastfilename, buff);
     SaveOptions();
-    strcpy(pp, name);
     p = buf = (char *)GetMemory(EDIT_BUFFER_SIZE);
     dlist = (a_dlist *)GetMemory(sizeof(a_dlist) * MAXDEFINES);
 
