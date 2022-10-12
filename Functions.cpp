@@ -1114,28 +1114,11 @@ extern "C" void  * DoExpression(unsigned char* p, int* t) {
     error((char *)"Internal fault (sorry)");
     return NULL;                                                    // to keep the compiler happy
 }
-// function (which looks like a pre defined variable) to return MM.CMDLINE$
-// it uses the command line for a shortcut RUN (the + symbol) which was stored in tknbuf[]
+
+// Function (which looks like a pre defined variable) to return MM.CMDLINE$
 void fun_cmdline(void) {
-    char* q, * p = runcmd;
-    sret = (unsigned char *)GetTempMemory(STRINGSIZE);									// this buffer is automatically zeroed so the string is zero size
-    skipspace(p);
-    if (*p == 34) {
-        do {
-            p++;
-        } while (*p != 34);
-        p++;
-        skipspace(p);
-        if (*p == ',') {
-            p++;
-            skipspace(p);
-        }
-    }
-    if ((q = strchr(p, '|'))) {
-        q--;
-        *q = 0;
-    }
-    strcpy((char *)sret, p);                                   // copy the string
+    sret = (unsigned char *)GetTempMemory(STRINGSIZE);
+    strcpy((char *)sret, cmd_run_args);
     CtoM(sret);
     targ = T_STR;
 }

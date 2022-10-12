@@ -453,17 +453,18 @@ void importfile(unsigned char* path, unsigned char* filename, unsigned char** p,
             }
             else *op++ = *ip++;
         }
+
+        // Convert everything outside of "quotes" or DATA to upper-case.
         slen = len;
-        if (!(toupper(sbuff[0]) == 'R' && toupper(sbuff[1]) == 'U' && toupper(sbuff[2]) == 'N' && (strlen(sbuff) == 3 || sbuff[3] == ' '))) {
-            toggle = 0;
-            for (c = 0; c < slen; c++) {
-                if (!(toggle || data))sbuff[c] = toupper(sbuff[c]);
-                if (sbuff[c] == 34) {
-                    if (toggle == 0)toggle = 1;
-                    else toggle = 0;
-                }
+        toggle = 0;
+        for (c = 0; c < slen; c++) {
+            if (!(toggle || data))sbuff[c] = toupper(sbuff[c]);
+            if (sbuff[c] == 34) {
+                if (toggle == 0)toggle = 1;
+                else toggle = 0;
             }
         }
+
         toggle = 0;
         for (c = 0; c < slen; c++) {
             if (sbuff[c] == 34) {
@@ -572,10 +573,7 @@ int FileLoadProgram(unsigned char* fn, int mode) {
             if (!existsfile(buff))error((char*)"File not found");
         }
     }
-//    tidyfilename(buff, path, name,0);
-//    strcpy(buff, path);
-//    strcat(buff, name);
-//    if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
+
     if (!BasicFileOpen(buff, fnbr, (char*)"rb")) return false;
     strcpy(lastfileedited, buff);
     strcpy(Option.lastfilename, buff);
@@ -655,16 +653,16 @@ int FileLoadProgram(unsigned char* fn, int mode) {
             }
         }
         else {
-            if (!(toupper(sbuff[0]) == 'R' && toupper(sbuff[1]) == 'U' && toupper(sbuff[2]) == 'N' && (strlen(sbuff) == 3 || sbuff[3] == ' '))) {
-                toggle = 0;
-                for (c = 0; c < slen; c++) {
-                    if (!(toggle || data))sbuff[c] = toupper(sbuff[c]);
-                    if (sbuff[c] == 34) {
-                        if (toggle == 0)toggle = 1;
-                        else toggle = 0;
-                    }
+            // Convert everything outside of "quotes" or DATA to upper-case.
+            toggle = 0;
+            for (c = 0; c < slen; c++) {
+                if (!(toggle || data))sbuff[c] = toupper(sbuff[c]);
+                if (sbuff[c] == 34) {
+                    if (toggle == 0)toggle = 1;
+                    else toggle = 0;
                 }
             }
+
             toggle = 0;
             for (c = 0; c < slen; c++) {
                 if (sbuff[c] == 34) {

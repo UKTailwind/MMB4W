@@ -34,7 +34,10 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "GUI.h"
 #include "audio.h"
 #include "Version.h"
+#include "error.h"
+
 #include <csetjmp>
+
 int MMCharPos;
 volatile int second = 15;                                            // date/time counters
 volatile int minute = 50;
@@ -478,6 +481,103 @@ void MouseProc(void) {
     if (mouse_left == 0) lastl = 0;
     if (mouse_right == 0) lastr = 0;
 }
+
+/**
+* @brief Transforms input beginning with * into a corresponding RUN command.
+*
+* e.g.
+*   *foo              =>  RUN "foo"
+*   *"foo bar"        =>  RUN "foo bar"
+*   *foo --wombat     =>  RUN "foo", "--wombat"
+*   *foo "wom"        =>  RUN "foo", Chr$(34) + "wom" + Chr$(34)
+*   *foo "wom" "bat"  =>  RUN "foo", Chr$(34) + "wom" + Chr$(34) + " " + Chr$(34) + "bat" + Chr$(34)
+*   *foo --wom="bat"  =>  RUN "foo", "--wom=" + Chr$(34) + "bat" + Chr$(34)
+*/
+static void transform_star_command(char *input) {
+    char *src = input;
+    while (isspace(*src)) src++; // Skip leading whitespace.
+    if (*src != '*') ERROR_INTERNAL_FAULT;
+    src++;
+
+    // Trim any trailing whitespace from the input.
+    char *end = input + strlen(input) - 1;
+    while (isspace(*end)) *end-- = '\0';
+
+    // Allocate extra space to avoid string overrun.
+    // We rely on the caller to clean this up.
+    char *tmp = (char *)GetTempMemory(STRINGSIZE + 32);
+    strcpy(tmp, "RUN");
+    char *dst = tmp + 3;
+
+    if (*src == '"') {
+        // Everything before the second quote is the name of the file to RUN.
+        *dst++ = ' ';
+        *dst++ = *src++; // Leading quote.
+        while (*src && *src != '"') *dst++ = *src++;
+        if (*src == '"') *dst++ = *src++; // Trailing quote.
+    }
+    else {
+        // Everything before the first space is the name of the file to RUN.
+        int count = 0;
+        while (*src && !isspace(*src)) {
+            if (++count == 1) {
+                *dst++ = ' ';
+                *dst++ = '\"';
+            }
+            *dst++ = *src++;
+        }
+        if (count) *dst++ = '\"';
+    }
+
+    while (isspace(*src)) src++; // Skip whitespace.
+
+    // Anything else is arguments.
+    if (*src) {
+        *dst++ = ',';
+        *dst++ = ' ';
+
+        // If 'src' starts with double-quote then replace with: Chr$(34) +
+        if (*src == '"') {
+            memcpy(dst, "Chr$(34) + ", 11);
+            dst += 11;
+            *src++;
+        }
+
+        *dst++ = '\"';
+
+        // Copy from 'src' to 'dst'.
+        while (*src) {
+            if (*src == '"') {
+                // Close current set of quotes to insert a Chr$(34)
+                memcpy(dst, "\" + Chr$(34)", 12);
+                dst += 12;
+
+                // Open another set of quotes unless this was the last character.
+                if (*(src + 1)) {
+                    memcpy(dst, " + \"", 4);
+                    dst += 4;
+                }
+                src++;
+            }
+            else {
+                *dst++ = *src++;
+            }
+            if (dst - tmp >= STRINGSIZE) ERROR_STRING_TOO_LONG;
+        }
+
+        // End with a double quote unless 'src' ended with one.
+        if (*(src - 1) != '"') *dst++ = '\"';
+
+        *dst = '\0';
+    }
+
+    if (dst - tmp >= STRINGSIZE) ERROR_STRING_TOO_LONG;
+
+    // Copy transformed string back into the input buffer.
+    strncpy(input, tmp, STRINGSIZE - 1);
+    input[STRINGSIZE - 1] = '\0';
+}
+
 DWORD WINAPI Basic(LPVOID lpParameter)
 {
     static int ErrorInPrompt;
@@ -680,27 +780,14 @@ DWORD WINAPI Basic(LPVOID lpParameter)
             ExecuteProgram((unsigned char *)"MM.PROMPT\0");
         }
         else
-            MMPrintString((char *)"> ");                                    // print the prompt
+            MMPrintString((char *)"> ");                            // print the prompt
         ErrorInPrompt = false;
         EditInputLine();
-        InsertLastcmd(inpbuf);                                  // save in case we want to edit it later
-//        MMgetline(0, inpbuf);                                       // get the input
-        if (!*inpbuf) continue;                                      // ignore an empty line
-        char* p = (char *)inpbuf;
+        InsertLastcmd(inpbuf);                                      // save in case we want to edit it later
+        if (!*inpbuf) continue;                                     // ignore an empty line
+        char *p = (char *)inpbuf;
         skipspace(p);
-        if (*p == '*') { //shortform RUN command so convert to a normal version
-            memmove(&p[4], &p[0], strlen(p) + 1);
-            p[0] = 'R'; p[1] = 'U'; p[2] = 'N'; p[3] = '$'; p[4] = 34;
-            char* q;
-            if ((q = strchr(p, ' ')) != 0) { //command line after the filename
-                *q = ','; //chop the command at the first space character
-                memmove(&q[1], &q[0], strlen(q) + 1);
-                q[0] = 34;
-            }
-            else strcat(p, "\"");
-            p[3] = ' ';
-            //		  PRet();MMPrintString(inpbuf);PRet();
-        }
+        if (*p == '*') transform_star_command((char *) inpbuf);     // note we deliberately transform 'inpbuf', not 'p'.
         tokenise(true);                                             // turn into executable code
         if (setjmp(jmprun) != 0) {
             PrepareProgram(false);

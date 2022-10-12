@@ -162,6 +162,7 @@
     <ClInclude Include="..\..\..\dr_mp3.h" />
     <ClInclude Include="..\..\..\dr_wav.h" />
     <ClInclude Include="..\..\..\Editor.h" />
+    <ClInclude Include="..\..\..\error.h" />
     <ClInclude Include="..\..\..\FileIO.h" />
     <ClInclude Include="..\..\..\Fnt_10x16.h" />
     <ClInclude Include="..\..\..\font1.h" />
