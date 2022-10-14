@@ -701,55 +701,45 @@ void ListProgram(unsigned char* pp, int all) {
 	FileClose(fnbr);
 }
 
-void execute(char* mycmd) {
-	//    char *temp_tknbuf;
-	unsigned char* ttp;
-	int i = 0, toggle = 0;
-	//    temp_tknbuf = GetTempStrMemory();
-	//    strcpy(temp_tknbuf, tknbuf);
-		// first save the current token buffer in case we are in immediate mode
-		// we have to fool the tokeniser into thinking that it is processing a program line entered at the console
-	skipspace(mycmd);
-	strcpy((char *)inpbuf, (const char *)getCstring((unsigned char *)mycmd));                                      // then copy the argument
-	if (!(toupper(inpbuf[0]) == 'R' && toupper(inpbuf[1]) == 'U' && toupper(inpbuf[2]) == 'N')) { //convert the string to upper case
-		while (inpbuf[i]) {
-			if (inpbuf[i] == 34) {
-				if (toggle == 0)toggle = 1;
-				else toggle = 0;
-			}
-			if (!toggle) {
-				if (inpbuf[i] == ':')error((char *)"Only single statements allowed");
-				inpbuf[i] = toupper(inpbuf[i]);
-			}
-			i++;
-		}
-		tokenise(true);                                                 // and tokenise it (the result is in tknbuf)
-		memset(inpbuf, 0, STRINGSIZE);
-		tknbuf[strlen((char *)tknbuf)] = 0;
-		tknbuf[strlen((char*)tknbuf) + 1] = 0;
-		ttp = nextstmt;                                                 // save the globals used by commands
-		ScrewUpTimer = 1000;
-		ExecuteProgram(tknbuf);                                              // execute the function's code
-		ScrewUpTimer = 0;
-		// TempMemoryIsChanged = true;                                     // signal that temporary memory should be checked
-		nextstmt = ttp;
-		return;
-	}
-	else {
-		unsigned char* p = inpbuf;
-		char * s=NULL;
-		char fn[STRINGSIZE] = { 0 };
-		p[0] = GetCommandValue((unsigned char *)"RUN");
-		memmove(&p[1], &p[4], strlen((char *)p) - 4);
-		p[strlen((char*)p) - 3] = 0;
-//		MMPrintString(fn); PRet();
-		CloseAudio(1);
-		strcpy((char *)tknbuf, (char*)inpbuf);
-		longjmp(jmprun, 1);
-	}
-}
 void cmd_execute(void) {
-	execute((char*)cmdline);
+    char *p = (char*) cmdline;
+    skipspace(p);
+    strcpy((char *) inpbuf, (const char *) getCstring((unsigned char *) p));
+
+    // Convert to upper-case and check for unsupported multiple-statements.
+    int i = 0, toggle = 0;
+    while (inpbuf[i]) {
+        if (inpbuf[i] == 34) {
+            toggle = toggle ? 0 : 1;
+        }
+        if (!toggle) {
+            if (inpbuf[i] == ':') error((char *) "Only single statements allowed");
+            inpbuf[i] = toupper(inpbuf[i]);
+        }
+        i++;
+    }
+
+    // Fool the tokeniser into thinking that it is processing a program line
+    // entered at the console.
+    tokenise(true);
+    memset(inpbuf, 0, STRINGSIZE);
+    tknbuf[strlen((char *)tknbuf)] = 0;
+    tknbuf[strlen((char *)tknbuf) + 1] = 0;
+
+    if (tknbuf[0] == GetCommandValue((unsigned char *) "Run")) {
+        // Special handling for EXECUTE "RUN ..." which is only expected to be
+        // present in legacy programs as it used to be necessary if you wanted
+        // the arguments to RUN to be calculated from an expression.
+        cmdline = tknbuf + 1;
+        cmd_run();
+    }
+    else {
+        unsigned char *ttp = nextstmt;  // Save the globals used by commands
+        ScrewUpTimer = 1000;
+        ExecuteProgram(tknbuf);
+        ScrewUpTimer = 0;
+        nextstmt = ttp;
+    }
 }
 
 /**
