@@ -699,7 +699,6 @@ DWORD WINAPI Basic(LPVOID lpParameter)
         gui_fcolour = PromptFC;
         gui_bcolour = PromptBC;
         //        setmode(Option.mode, 0, Option.fullscreen);
-        CurrentX = 0;
         if (errpos) {
             CloseAllFiles();
             if (CurrentX != 0) MMPrintString((char*)"\r\n");                   // error message should be on a new line
@@ -708,6 +707,7 @@ DWORD WINAPI Basic(LPVOID lpParameter)
         }
         errpos = 0;
         errstring[0] = 0;
+        CurrentX = 0;
     }
     else {
         if (lpParameter != NULL) {

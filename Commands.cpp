@@ -1785,15 +1785,11 @@ void cmd_exit(void) {
 
 
 void cmd_error(void) {
-	char* s, p[STRINGSIZE];
-	if (*cmdline && *cmdline != '\'') {
-		s = (char *)getCstring(cmdline);
-		if (CurrentX != 0) MMPrintString((char*)"\r\n");                   // error message should be on a new line
-		strcpy(p, s);
-		error(p);
-	}
-	else
-		error((char *)"");
+    if (*cmdline && *cmdline != '\'') {
+        error((char *) getCstring(cmdline));
+    } else {
+        error((char *) "");
+    }
 }
 
 
