@@ -816,7 +816,7 @@ static void cmd_run_transform_legacy_args(char *run_args) {
             }
         }
 
-        if (ptmp - tmp >= STRINGSIZE - 1) break;
+        if (ptmp - tmp >= STRINGSIZE - 1) break; // TODO: String overrun / error handling
     }
     *ptmp = '\0';
     strncpy(run_args, tmp, STRINGSIZE - 1);
@@ -940,25 +940,36 @@ void cmd_new(void) {
 	longjmp(mark, 1);							                    // jump back to the input prompt
 }
 
+static void parse_name(const char **p, char *name) {
+    skipspace((*p)); // Double bracket is necessary for correct macro expansion.
+    if (!isnamestart(**p)) ERROR_SYNTAX; // Not a name.
+    size_t name_len = 0;
+    *name++ = toupper(*((*p)++));
+    name_len++;
+    while (isnamechar(**p) && name_len < MAXVARLEN) {
+        *name++ = toupper(*((*p)++));
+        name_len++;
+    }
+    *name = '\0';
+    if (isnamechar(**p)) ERROR_NAME_TOO_LONG;
+}
 
 void cmd_erase(void) {
 	int i, j, k, len;
-	char p[MAXVARLEN + 1], * s, * x;
+    const char *s, *x;
+    char name[MAXVARLEN + 1];
 
-	getargs(&cmdline, (MAX_ARG_COUNT * 2) - 1, (unsigned char *)",");				// getargs macro must be the first executable stmt in a block
+	getargs(&cmdline, (MAX_ARG_COUNT * 2) - 1, (unsigned char *)",");
 	if((argc & 0x01) == 0) error((char *)"Argument count");
 
 	for (i = 0; i < argc; i += 2) {
-		strcpy((char*)p, (const char *)argv[i]);
-		while (!isnamechar(p[strlen(p) - 1])) p[strlen(p) - 1] = 0;
-
-		makeupper((unsigned char *)p);                                               // all variables are stored as uppercase
+        parse_name((const char **) &argv[i], name);
 		for (j = MAXVARS / 2; j < MAXVARS; j++) {
-			s = p;  x = vartbl[j].name; len = strlen(p);
+			s = name;  x = vartbl[j].name; len = strlen(name);
 			while (len > 0 && *s == *x) {                            // compare the variable to the name that we have
 				len--; s++; x++;
 			}
-			if(!(len == 0 && (*x == 0 || strlen(p) == MAXVARLEN))) continue;
+			if(!(len == 0 && (*x == 0 || strlen(name) == MAXVARLEN))) continue;
 
 			// found the variable
 			if(((vartbl[i].type & T_STR) || vartbl[i].dims[0] != 0) && !(vartbl[i].type & T_PTR)) {
@@ -980,7 +991,7 @@ void cmd_erase(void) {
 			Globalvarcnt--;
 			break;
 		}
-		if(j == MAXVARS) error((char *)"Cannot find $", p);
+		if(j == MAXVARS) error((char *)"Cannot find $", name);
 	}
 }
 void cmd_clear(void) {

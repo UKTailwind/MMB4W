@@ -26,5 +26,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #pragma once
 
 #define ERROR_INTERNAL_FAULT   error((char *) "Internal fault (sorry)")
+#define ERROR_NAME_TOO_LONG    error((char *) "Name too long")
 #define ERROR_NOTHING_TO_RUN   error((char *) "Nothing to run")
 #define ERROR_STRING_TOO_LONG  error((char *) "String too long")
+#define ERROR_SYNTAX           error((char *) "Syntax")
