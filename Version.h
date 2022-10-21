@@ -1,4 +1,3 @@
-#pragma once
 /***********************************************************************************************************************
 MMBasic for Windows
 
@@ -24,7 +23,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 
 ************************************************************************************************************************/
 
+#pragma once
 
-#define VERSION         "5.07.03b11"				    // define the version number
-#define YEAR			"2011-2022"			    // and the year
-#define YEAR2          "2016-2022"
+#define VERSION  "5.07.03b12"  // define the version number
+#define YEAR     "2011-2022"   // and the year
+#define YEAR2    "2016-2022"
