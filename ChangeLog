@@ -1,0 +1,26 @@
+ChangeLog
+---------
+
+Version 5.07.03b12 - 23-Oct-2022:
+  - Added MM.INFO(FONT ADDRESS font%)
+  - Changed syntax of RUN command to:
+        RUN [file$] [, cmdline$]
+    Both file$ and cmdline$ now expect proper string expressions instead of
+    the old non-standard behaviour where the command line argument was
+    "not processed by MMBasic" and instead copied verbatim into the
+    MM.CMDLINE$ variable of the new program.
+        - this change means that cmdline$ can now be constructed from other
+          variables and functions instead of having to be hardcoded, or
+          finessed by using EXECUTE to construct the RUN statement.
+        - if the command line argument contains an unquoted minus sign then
+          for backward compatibility MMBasic trys to use the old behaviour,
+          but this does not work for all possible old-style command lines.
+    Note that the behaviour of the * command is unchanged; expressions in any
+    command line provided via * are not evaluated by MMBasic, e.g.
+        *foo a$ + b$
+    is equivalent to:
+        RUN "foo", "a$ + b$"
+  - Fixed bug where ERASE would crash MMB4W if variable name too long.
+  - Fixed bug where ERASE would not free heap memory for arrays or strings.
+  - Fixed bug where spurious newlines could be printed when SKIPping errors.
+  - Fixed bug when an error was thrown from a line containing '|' character.
