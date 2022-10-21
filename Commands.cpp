@@ -972,11 +972,11 @@ void cmd_erase(void) {
 			if(!(len == 0 && (*x == 0 || strlen(name) == MAXVARLEN))) continue;
 
 			// found the variable
-			if(((vartbl[i].type & T_STR) || vartbl[i].dims[0] != 0) && !(vartbl[i].type & T_PTR)) {
-				FreeMemory((unsigned char *)vartbl[i].val.s);                        // free any memory (if allocated)
-				vartbl[i].val.s = NULL;
+			if(((vartbl[j].type & T_STR) || vartbl[j].dims[0] != 0) && !(vartbl[j].type & T_PTR)) {
+				FreeMemory((unsigned char *)vartbl[j].val.s);                        // free any memory (if allocated)
+				vartbl[j].val.s = NULL;
 			}
-			k = i + 1;
+			k = j + 1;
 			if(k == MAXVARS)k = MAXVARS / 2;
 			if(vartbl[k].type) {
 				vartbl[j].name[0] = '~';
@@ -986,8 +986,8 @@ void cmd_erase(void) {
 				vartbl[j].name[0] = 0;
 				vartbl[j].type = T_NOTYPE;
 			}
-			vartbl[i].dims[0] = 0;                                    // and again
-			vartbl[i].level = 0;
+			vartbl[j].dims[0] = 0;                                    // and again
+			vartbl[j].level = 0;
 			Globalvarcnt--;
 			break;
 		}
