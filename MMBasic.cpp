@@ -460,7 +460,6 @@ void error(char* msg, ...) {
         gui_bcolour = PromptBC;
     }
 
-//    if (MMCharPos > 1 && !OptionErrorSkip) MMErrorString((char*)"\r\n");
     if (CurrentLinePtr) {
         tp = p = (unsigned char*)ProgMemory;
         if (*CurrentLinePtr != T_NEWLINE && CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) {
@@ -484,10 +483,9 @@ void error(char* msg, ...) {
         llist(tknbuf, CurrentLinePtr);
         p = tknbuf; skipspace(p);
         if (CurrentLinePtr < ProgMemory + MAX_PROG_SIZE) {
-//            if (MMCharPos > 1)MMErrorString((char*)"\r\n");
             MMErrorString((char*)"Error in ");
             char* ename;
-            if ((cpos = strchr((char*)tknbuf, '|')) != NULL) {
+            if ((cpos = strrchr((char*)tknbuf, '|')) != NULL) {
                 if ((ename = strchr(cpos, ',')) != NULL) {
                     *ename = 0;
                     cpos++;
@@ -510,9 +508,8 @@ void error(char* msg, ...) {
             }
         }
     }
-    //    if(!OptionErrorSkip)MMErrorString("Error");
+
     if (*msg) {
-        //    	if(!OptionErrorSkip)MMErrorString(": ");
         va_start(ap, msg);
         while (*msg) {
             if (*msg == '$')

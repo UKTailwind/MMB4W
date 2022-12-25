@@ -165,6 +165,19 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                                                     NULL,
 
     };
+    extern "C" unsigned int GetPeekAddr(unsigned char* p) {
+        unsigned int i;
+        i = (unsigned int)getinteger(p);
+        if (!POKERANGE(i) && !(i >= (uint32_t)font1 && i < (uint32_t)F_6x8_LE + sizeof(F_6x8_LE))) error((char*)"Address");
+        return i;
+    }
+    extern "C" unsigned int GetPokeAddr(unsigned char* p) {
+        unsigned int i;
+        i = (unsigned int)getinteger(p);
+        if (!POKERANGE(i)) error((char*)"Address");
+        return i;
+    }
+
     extern "C" void SetFont(int fnt) {
 //        PIntH((uint32_t)FontTable[fnt >> 4]); PRet(); uSec(4000000);
         if(FontTable[fnt >> 4] == NULL) error((char *)"Invalid font number #%", (fnt >> 4) + 1);

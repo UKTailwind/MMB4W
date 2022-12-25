@@ -3,6 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
+#pragma once
 
 const unsigned char F_6x8_LE[580] = {
 		0x06,0x08,0x20,0x60,

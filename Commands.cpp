@@ -25,6 +25,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "olcPixelGameEngine.h"
 #include "MainThread.h"
 #include "MMBasic_Includes.h"
+#include "error.h"
+
 #include <math.h>
 
 void flist(int, int, int);
@@ -35,7 +37,7 @@ char MMErrMsg[MAXERRMSG];                                           // the error
 unsigned char* KeyInterrupt = NULL;
 volatile int Keycomplete = 0;
 int keyselect = 0;
-char runcmd[STRINGSIZE] = { 0 };
+char cmd_run_args[STRINGSIZE] = { 0 };
 
 
 // stack to keep track of nested FOR/NEXT loops
@@ -699,76 +701,211 @@ void ListProgram(unsigned char* pp, int all) {
 	FileClose(fnbr);
 }
 
-void execute(char* mycmd) {
-	//    char *temp_tknbuf;
-	unsigned char* ttp;
-	int i = 0, toggle = 0;
-	//    temp_tknbuf = GetTempStrMemory();
-	//    strcpy(temp_tknbuf, tknbuf);
-		// first save the current token buffer in case we are in immediate mode
-		// we have to fool the tokeniser into thinking that it is processing a program line entered at the console
-	skipspace(mycmd);
-	strcpy((char *)inpbuf, (const char *)getCstring((unsigned char *)mycmd));                                      // then copy the argument
-	if (!(toupper(inpbuf[0]) == 'R' && toupper(inpbuf[1]) == 'U' && toupper(inpbuf[2]) == 'N')) { //convert the string to upper case
-		while (inpbuf[i]) {
-			if (inpbuf[i] == 34) {
-				if (toggle == 0)toggle = 1;
-				else toggle = 0;
-			}
-			if (!toggle) {
-				if (inpbuf[i] == ':')error((char *)"Only single statements allowed");
-				inpbuf[i] = toupper(inpbuf[i]);
-			}
-			i++;
-		}
-		tokenise(true);                                                 // and tokenise it (the result is in tknbuf)
-		memset(inpbuf, 0, STRINGSIZE);
-		tknbuf[strlen((char *)tknbuf)] = 0;
-		tknbuf[strlen((char*)tknbuf) + 1] = 0;
-		ttp = nextstmt;                                                 // save the globals used by commands
-		ScrewUpTimer = 1000;
-		ExecuteProgram(tknbuf);                                              // execute the function's code
-		ScrewUpTimer = 0;
-		// TempMemoryIsChanged = true;                                     // signal that temporary memory should be checked
-		nextstmt = ttp;
-		return;
-	}
-	else {
-		unsigned char* p = inpbuf;
-		char * s=NULL;
-		char fn[STRINGSIZE] = { 0 };
-		p[0] = GetCommandValue((unsigned char *)"RUN");
-		memmove(&p[1], &p[4], strlen((char *)p) - 4);
-		p[strlen((char*)p) - 3] = 0;
-//		MMPrintString(fn); PRet();
-		CloseAudio(1);
-		strcpy((char *)tknbuf, (char*)inpbuf);
-		longjmp(jmprun, 1);
-	}
-}
 void cmd_execute(void) {
-	execute((char*)cmdline);
+    char *p = (char*) cmdline;
+    skipspace(p);
+    strcpy((char *) inpbuf, (const char *) getCstring((unsigned char *) p));
+
+    // Convert to upper-case and check for unsupported multiple-statements.
+    int i = 0, toggle = 0;
+    while (inpbuf[i]) {
+        if (inpbuf[i] == 34) {
+            toggle = toggle ? 0 : 1;
+        }
+        if (!toggle) {
+            if (inpbuf[i] == ':') error((char *) "Only single statements allowed");
+            inpbuf[i] = toupper(inpbuf[i]);
+        }
+        i++;
+    }
+
+    // Fool the tokeniser into thinking that it is processing a program line
+    // entered at the console.
+    tokenise(true);
+    memset(inpbuf, 0, STRINGSIZE);
+    tknbuf[strlen((char *)tknbuf)] = 0;
+    tknbuf[strlen((char *)tknbuf) + 1] = 0;
+
+    if (tknbuf[0] == GetCommandValue((unsigned char *) "Run")) {
+        // Special handling for EXECUTE "RUN ..." which is only expected to be
+        // present in legacy programs as it used to be necessary if you wanted
+        // the arguments to RUN to be calculated from an expression.
+        cmdline = tknbuf + 1;
+        cmd_run();
+    }
+    else {
+        unsigned char *ttp = nextstmt;  // Save the globals used by commands
+        ScrewUpTimer = 1000;
+        ExecuteProgram(tknbuf);
+        ScrewUpTimer = 0;
+        nextstmt = ttp;
+    }
 }
 
+/**
+ * Heuristically determines whether the "legacy" (non-string expression) format
+ * is being used for RUN arguments.
+ *
+ * This and the 'cmd_run_transform_legacy_args' functions are probably only
+ * required short-term on the CMM2 and MMB4W to support old versions of
+ * "The Welcome Tape" and tools by @thwill.
+ *
+ * @return true   if the 'cmd_args' contain the MMBasic minus-sign token
+ *                or if the 'filename' contains "menu/menu.bas" AND the
+ *                'cmd_args' start with "MENU_".
+ *         false  otherwise.
+ */
+static bool cmd_run_is_legacy_args(const char *filename, const char *run_args) {
+    if (strchr(run_args, GetTokenValue((unsigned char *) "-"))) return true;
+    if (filename
+            && strstr(filename, "menu/menu.bas")
+            && strstr(run_args, "MENU_") == run_args) return true;
+    return false;
+}
+
+/**
+ * Makes a best effort to restore tokenised RUN arguments to the
+ * "legacy" (non-string expression) format
+ *
+ *  - tokens are converted back to literals,
+ *  - unquoted strings are converted to lower-case,
+ *  - whitespace may not be restored exactly the same.
+ *
+ * Probably it is "overkill".
+ */
+static void cmd_run_transform_legacy_args(char *run_args) {
+    char *tmp = (char *) GetTempMemory(STRINGSIZE + 32); // Extra space to avoid string overrun.
+    char *ptmp = tmp;
+    for (char *p = run_args; *p; ++p) {
+        char *tok = (char *) tokenname((unsigned char) *p);
+        if (*tok) {
+            // Convert tokens backs to literals and try to do sensible things
+            // regarding spaces.
+            if (ptmp != tmp && *(ptmp - 1) != ' ') {
+                switch (*tok) {
+                    case '-':
+                        if (*(ptmp - 1) != '-' && !isalnum(*(ptmp - 1))) *ptmp++ = ' ';
+                        break;
+                    case '=':
+                        if (!isalnum(*(ptmp - 1))) *ptmp++ = ' ';
+                        break;
+                    default:
+                        *ptmp++ = ' ';
+                        break;
+                }
+            }
+            memcpy(ptmp, tok, strlen(tok));
+            ptmp += strlen(tok);
+        } else if (*p == '"') {
+            // Do not mangle quoted sections.
+            *ptmp++ = *p++;
+            for (; *p; ++p) {
+                *ptmp++ = *p;
+                if (*p == '"') break;
+            }
+        } else {
+            if (*p == ' ' && ptmp != tmp) {
+                // Compress consecutive spaces.
+                if (*(ptmp - 1) != ' ') *ptmp++ = ' ';
+            } else {
+                // Though the current MMB4L tokeniser preserves case, that in
+                // MMB4W and other MMBasic ports by Peter will have converted
+                // unquoted legacy arguments to upper-case. On the balance of
+                // probabilities we convert them to lower-case here.
+                *ptmp++ = tolower(*p);
+            }
+        }
+
+        if (ptmp - tmp >= STRINGSIZE - 1) break; // TODO: String overrun / error handling
+    }
+    *ptmp = '\0';
+    strncpy(run_args, tmp, STRINGSIZE - 1);
+    run_args[STRINGSIZE - 1] = '\0';
+    ClearSpecificTempMemory(tmp);
+}
+
+/**
+ * Parses filename and RUN arguments from a token buffer.
+ *
+ * @param[in]   p         pointer to the buffer.
+ * @param[out]  filename  buffer to hold the filename, should be at least STRINGSIZE.
+ * @param[out]  run_args  buffer to hold the RUN args, should be at least STRINGSIZE.
+ */
+void cmd_run_parse_args(const char *p, char *filename, char *run_args) {
+    *filename = '\0';
+    *run_args = '\0';
+    if (!*p) return;
+
+    getargs((unsigned char **) &p, 3, (unsigned char *) ",");
+    int filename_idx = -1;  // Index into argv[] for filename.
+    int run_args_idx = -1;  // Index into argv[] for additional arguments.
+
+    // Note for legacy compatibility we need to allow the trailing comma.
+    if (argc == 1 && *(argv[0]) == ',') {
+        // RUN ,
+        // Don't set filename or cmd_run_args.
+    } else if (argc == 1) {
+        // RUN file$
+        if (*(argv[0]) != ',') filename_idx = 0;
+    } else if (argc == 2 && *(argv[0]) == ',') {
+        // RUN , args$
+        run_args_idx = 1;
+    } else if (argc == 2) {
+        // RUN file$ ,
+        filename_idx = 0;
+    } else if (argc == 3) {
+        // RUN file$ , args$
+        filename_idx = 0;
+        run_args_idx = 2;
+    } else {
+        ERROR_INTERNAL_FAULT;
+        return;
+    }
+
+    if (filename_idx >= 0) strcpy(filename, (char *) getCstring(argv[0]));
+
+    if (run_args_idx >= 0) {
+        if (cmd_run_is_legacy_args(filename, (char *) argv[run_args_idx])) {
+            strcpy(run_args, (char *) argv[run_args_idx]);
+            cmd_run_transform_legacy_args(run_args);
+        } else {
+            strcpy(run_args, (char *) getCstring(argv[run_args_idx]));
+        }
+    }
+}
 
 void cmd_run(void) {
-	skipspace(cmdline);
-	memset(runcmd, 0, STRINGSIZE);
-	memcpy(runcmd, cmdline, strlen((char *)cmdline));
+    char filename[STRINGSIZE] = { 0 };  // Filename to RUN.
+    int mode = 0;  // 0 : send string-expression filename to FileLoadProgram
+                   // 1 : send literal filename to FileLoadProgram
 
-	if (*cmdline && *cmdline != '\'') {
-		if (!FileLoadProgram(cmdline, 0)) return;
-	}
-	else {
-		if (*lastfileedited == 0)error((char*)"Nothing to run");
-		if (!FileLoadProgram((unsigned char *)lastfileedited, 1)) return;
-	}
-	ClearRuntime();
-	WatchdogSet = false;
-	PrepareProgram(true);
-	IgnorePIN = false;
-	if(*ProgMemory != T_NEWLINE) return;                             // no program to run
-	nextstmt = ProgMemory;
+    skipspace(cmdline);
+    cmd_run_parse_args((const char *) cmdline, filename, cmd_run_args);
+
+    if (*filename) {
+        size_t len = strlen((char *) filename);
+        memmove(filename + 1, filename, len);
+        filename[0] = '"';
+        filename[len + 1] = '"';
+        filename[len + 2] = '\0';
+    } else {
+        if (*lastfileedited != '\0') {
+            strcpy(filename, lastfileedited);
+            mode = 1;
+        } else {
+            ERROR_NOTHING_TO_RUN;
+            return;
+        }
+    }
+
+    if (!FileLoadProgram((unsigned char *) filename, mode)) return;
+
+    ClearRuntime();
+    WatchdogSet = false;
+    PrepareProgram(true);
+    IgnorePIN = false;
+    if (*ProgMemory != T_NEWLINE) return;  // no program to run
+    nextstmt = ProgMemory;
 }
 
 
@@ -803,32 +940,43 @@ void cmd_new(void) {
 	longjmp(mark, 1);							                    // jump back to the input prompt
 }
 
+static void parse_name(const char **p, char *name) {
+    skipspace((*p)); // Double bracket is necessary for correct macro expansion.
+    if (!isnamestart(**p)) ERROR_SYNTAX; // Not a name.
+    size_t name_len = 0;
+    *name++ = toupper(*((*p)++));
+    name_len++;
+    while (isnamechar(**p) && name_len < MAXVARLEN) {
+        *name++ = toupper(*((*p)++));
+        name_len++;
+    }
+    *name = '\0';
+    if (isnamechar(**p)) ERROR_NAME_TOO_LONG;
+}
 
 void cmd_erase(void) {
 	int i, j, k, len;
-	char p[MAXVARLEN + 1], * s, * x;
+    const char *s, *x;
+    char name[MAXVARLEN + 1];
 
-	getargs(&cmdline, (MAX_ARG_COUNT * 2) - 1, (unsigned char *)",");				// getargs macro must be the first executable stmt in a block
+	getargs(&cmdline, (MAX_ARG_COUNT * 2) - 1, (unsigned char *)",");
 	if((argc & 0x01) == 0) error((char *)"Argument count");
 
 	for (i = 0; i < argc; i += 2) {
-		strcpy((char*)p, (const char *)argv[i]);
-		while (!isnamechar(p[strlen(p) - 1])) p[strlen(p) - 1] = 0;
-
-		makeupper((unsigned char *)p);                                               // all variables are stored as uppercase
+        parse_name((const char **) &argv[i], name);
 		for (j = MAXVARS / 2; j < MAXVARS; j++) {
-			s = p;  x = vartbl[j].name; len = strlen(p);
+			s = name;  x = vartbl[j].name; len = strlen(name);
 			while (len > 0 && *s == *x) {                            // compare the variable to the name that we have
 				len--; s++; x++;
 			}
-			if(!(len == 0 && (*x == 0 || strlen(p) == MAXVARLEN))) continue;
+			if(!(len == 0 && (*x == 0 || strlen(name) == MAXVARLEN))) continue;
 
 			// found the variable
-			if(((vartbl[i].type & T_STR) || vartbl[i].dims[0] != 0) && !(vartbl[i].type & T_PTR)) {
-				FreeMemory((unsigned char *)vartbl[i].val.s);                        // free any memory (if allocated)
-				vartbl[i].val.s = NULL;
+			if(((vartbl[j].type & T_STR) || vartbl[j].dims[0] != 0) && !(vartbl[j].type & T_PTR)) {
+				FreeMemory((unsigned char *)vartbl[j].val.s);                        // free any memory (if allocated)
+				vartbl[j].val.s = NULL;
 			}
-			k = i + 1;
+			k = j + 1;
 			if(k == MAXVARS)k = MAXVARS / 2;
 			if(vartbl[k].type) {
 				vartbl[j].name[0] = '~';
@@ -838,12 +986,12 @@ void cmd_erase(void) {
 				vartbl[j].name[0] = 0;
 				vartbl[j].type = T_NOTYPE;
 			}
-			vartbl[i].dims[0] = 0;                                    // and again
-			vartbl[i].level = 0;
+			vartbl[j].dims[0] = 0;                                    // and again
+			vartbl[j].level = 0;
 			Globalvarcnt--;
 			break;
 		}
-		if(j == MAXVARS) error((char *)"Cannot find $", p);
+		if(j == MAXVARS) error((char *)"Cannot find $", name);
 	}
 }
 void cmd_clear(void) {
@@ -1637,15 +1785,11 @@ void cmd_exit(void) {
 
 
 void cmd_error(void) {
-	char* s, p[STRINGSIZE];
-	if (*cmdline && *cmdline != '\'') {
-		s = (char *)getCstring(cmdline);
-		if (CurrentX != 0) MMPrintString((char*)"\r\n");                   // error message should be on a new line
-		strcpy(p, s);
-		error(p);
-	}
-	else
-		error((char *)"");
+    if (*cmdline && *cmdline != '\'') {
+        error((char *) getCstring(cmdline));
+    } else {
+        error((char *) "");
+    }
 }
 
 

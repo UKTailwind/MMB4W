@@ -1115,6 +1115,12 @@ void fun_info(void) {
         targ = T_INT;
         return;
     }
+    tp = checkstring(ep, (unsigned char*)"FONT ADDRESS");
+    if (tp) {
+        iret = (int64_t)((uint32_t)FontTable[getint(tp, 1, FONT_TABLE_SIZE) - 1]);
+        targ = T_INT;
+        return;
+    }
     tp = checkstring(ep, (unsigned char*)"CPUSPEED");
     if (tp) {
         int64_t frequency;
@@ -2567,12 +2573,6 @@ void fun_keydown(void) {
     targ = T_INT;
 }
 // utility function used by fun_peek() to validate an address
-extern "C" unsigned int GetPeekAddr(unsigned char* p) {
-    unsigned int i;
-    i = (unsigned int)getinteger(p);
-    if(!POKERANGE(i)) error((char *)"Address");
-    return i;
-}
 
 // Will return a byte within the PIC32 virtual memory space.
 void fun_peek(void) {
@@ -2654,12 +2654,6 @@ void fun_peek(void) {
     // default action is the old syntax of  b = PEEK(hiaddr, loaddr)
     iret = *(char*)(((int)getinteger(argv[0]) << 16) + (int)getinteger(argv[2]));
     targ = T_INT;
-}
-extern "C" unsigned int GetPokeAddr(unsigned char* p) {
-    unsigned int i;
-    i = (unsigned int)getinteger(p);
-    if (!POKERANGE(i)) error((char*)"Address");
-    return i;
 }
 
 void cmd_poke(void) {

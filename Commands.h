@@ -234,6 +234,6 @@ extern unsigned char* TraceBuff[TRACE_BUFF_SIZE];
 extern int TraceBuffIndex;                                          // used for listing the contents of the trace buffer
 extern int OptionErrorSkip;
 extern char MMErrMsg[MAXERRMSG];
-extern char runcmd[STRINGSIZE];
+extern char cmd_run_args[STRINGSIZE];
 
 #endif
