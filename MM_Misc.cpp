@@ -55,6 +55,7 @@ char SaveErrorMessage[MAXERRMSG] = { 0 };
 int Saveerrno = 0;
 int64_t fasttimerat0;
 MMFLOAT optionangle = 1.0;
+int OptionEscape = false;
 int optiony = 0;
 int64_t lasttimer = -1;
 bool OptionConsoleSerial = false;
@@ -410,7 +411,7 @@ void cmd_autosave(void) {
     char fname[STRINGSIZE];
     if (CurrentLinePtr) error((char *)"Invalid in a program");
     if ((*cmdline == 0 || *cmdline == '\''))error((char *)"Syntax");
-    r = getCstring(cmdline);
+    r = getFstring(cmdline);
     fullfilename((char *)r, fname, ".BAS");
     ClearProgram();                                                 // clear any leftovers from the previous program
     p = buf = (unsigned char *)GetMemory(EDIT_BUFFER_SIZE);
@@ -755,7 +756,7 @@ void cmd_option(void) {
         int i = 0;
         DWORD j = 0;
         char path[STRINGSIZE] = { 0 };
-        p = (char*)getCstring(tp);	
+        p = (char*)getFstring(tp);	
         tidypath(p, path);
         if (strlen(path) > 255)error((char *)"Pathname too long");
         if (!dirExists((const char*)path)) error((char*)"Directory $ does not exist",path);// get the directory name and convert to a standard C string
@@ -776,7 +777,7 @@ void cmd_option(void) {
         int i = 0;
         DWORD j = 0;
         char path[STRINGSIZE] = { 0 };
-        p = (char*)getCstring(tp);
+        p = (char*)getFstring(tp);
         if (!strlen(p)) {
             memset(Option.searchpath, 0, sizeof(Option.searchpath));
             SaveOptions();
@@ -890,6 +891,11 @@ void cmd_option(void) {
     if (tp) {
         if (checkstring(tp, (unsigned char*)"DEGREES")) { optionangle = RADCONV; return; }
         if (checkstring(tp, (unsigned char*)"RADIANS")) { optionangle = 1.0; return; }
+    }
+    tp = checkstring(cmdline, (unsigned char*)"ESCAPE");
+    if (tp) {
+        OptionEscape = true;
+        return;
     }
 
     tp = checkstring(cmdline, (unsigned char*)"Y_AXIS");
@@ -1175,19 +1181,19 @@ void fun_info(void) {
     }
     tp = checkstring(ep, (unsigned char*)"EXISTS FILE");
     if (tp) {
-        iret = (int64_t)existsfile((char*)getCstring(tp));
+        iret = (int64_t)existsfile((char*)getFstring(tp));
         targ = T_INT;
         return;
     }
     tp = checkstring(ep, (unsigned char*)"EXISTS DIR");
     if (tp) {
-        iret = (int64_t)dirExists((char*)getCstring(tp));
+        iret = (int64_t)dirExists((char*)getFstring(tp));
         targ = T_INT;
         return;
     }
     tp = checkstring(ep, (unsigned char*)"EXISTS");
     if (tp) {
-        iret = (int64_t)(existsfile((char*)getCstring(tp)) || dirExists((char*)getCstring(tp)));
+        iret = (int64_t)(existsfile((char*)getFstring(tp)) || dirExists((char*)getFstring(tp)));
         targ = T_INT;
         return;
     }
@@ -1343,7 +1349,8 @@ void fun_info(void) {
         }
         else if (tp=checkstring(ep, (unsigned char*)"FILESIZE")) {
             char* p = (char*)getCstring(tp);
-            if (p[strlen(p) - 1] == '/' || p[strlen(p) - 1] == '\\')error((char*)"Invalid file specification");
+            iret = 0;
+            while (p[strlen(p) - 1] == '/' || p[strlen(p) - 1] == '\\')p[strlen(p) - 1] = 0;
             if(dirExists(p))iret = -2;
             else iret = filesize((char *)getCstring(tp));
             targ = T_INT;
@@ -1570,7 +1577,6 @@ void fun_datetime(void) {
         struct tm tma;
         tm = &tma;
         time_t timestamp = getinteger(ep); /* See README.md if your system lacks timegm(). */
-//        if (timestamp < 0)error((char*)"Epoch<0");
         tm = mygmtime(&timestamp);
         IntToStrPad((char*)sret, tm->tm_mday, '0', 2, 10);
         sret[2] = '-'; IntToStrPad((char*)sret + 3, tm->tm_mon + 1, '0', 2, 10);

@@ -1488,6 +1488,121 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             }
         }
     }
+    int xb0, xb1, yb0, yb1;
+    void drawAAPixel(int x, int y, MMFLOAT brightness, uint32_t c) {
+        union colourmap
+        {
+            unsigned char rgbbytes[4];
+            unsigned int rgb;
+        } col;
+        col.rgb = c;
+        col.rgbbytes[0] = (unsigned char)((MMFLOAT)col.rgbbytes[0] * brightness);
+        col.rgbbytes[1] = (unsigned char)((MMFLOAT)col.rgbbytes[1] * brightness);
+        col.rgbbytes[2] = (unsigned char)((MMFLOAT)col.rgbbytes[2] * brightness);
+        if (((x >= xb0 && x <= xb1) && (y >= yb0 && y <= yb1)))DrawPixel(x, y, col.rgb);
+    }
+    void drawAALine(MMFLOAT x0, MMFLOAT y0, MMFLOAT x1, MMFLOAT y1, uint32_t c, int w)
+    {
+        // Ensure positive integer values for width
+        if (w < 1) w = 1;
+
+        // If drawing a dot, the call drawDot function
+        //if Math.abs(y1 - y0) < 1.0 && Math.abs(x1 - x0) < 1.0
+        //  #drawDot (x0 + x1) / 2, (y0 + y1) / 2
+        //  return
+        xb0 = (int)x0; xb1 = (int)x1; yb0 = (int)y0; yb1 = (int)y1;
+        if (xb1 < xb0)std::swap(xb1, xb0);
+        if (yb1 < yb0)std::swap(yb1, yb0);
+
+        // steep means that m > 1
+        int steep = abs(y1 - y0) > abs(x1 - x0);
+        // swap the co-ordinates if slope > 1 or we
+        // draw backwards
+        if (steep)
+        {
+            std::swap(x0, y0);
+            std::swap(x1, y1);
+        }
+        if (x0 > x1)
+        {
+            std::swap(x0, x1);
+            std::swap(y0, y1);
+        }
+        //compute the slope
+        MMFLOAT dx = x1 - x0;
+        MMFLOAT dy = y1 - y0;
+        MMFLOAT gradient = dy / dx;
+        if (dx == 0.0)
+            gradient = 1;
+
+        //rotate w
+        w = w * (int)sqrt(1 + (gradient * gradient));
+
+        // Handle first endpoint
+        MMFLOAT xend = round(x0);
+        MMFLOAT yend = y0 - (w - 1) * 0.5 + gradient * (xend - x0);
+        MMFLOAT xgap = 1.0 - (x0 + 0.5 - xend);
+        MMFLOAT xpxl1 = xend; //this will be used in the main loop
+        MMFLOAT ypxl1 = floor(yend);
+        MMFLOAT fpart = yend - floor(yend);
+        MMFLOAT rfpart = 1 - fpart;
+
+        if (steep) {
+            drawAAPixel((int)ypxl1, (int)xpxl1, rfpart * xgap, c);
+            for (int i = 1; i <= w; i++) drawAAPixel((int)ypxl1 + i, (int)xpxl1, 1, c);
+            drawAAPixel((int)ypxl1 + w, (int)xpxl1, fpart * xgap, c);
+        }
+        else {
+            drawAAPixel((int)xpxl1, (int)ypxl1, rfpart * xgap, c);
+            for (int i = 1; i <= w; i++) drawAAPixel((int)xpxl1, (int)ypxl1 + i, 1, c);
+            drawAAPixel((int)xpxl1, (int)ypxl1 + w, fpart * xgap, c);
+        }
+        MMFLOAT intery = yend + gradient; // first y-intersection for the main loop
+
+    // Handle second endpoint
+        xend = round(x1);
+        yend = (y1 - (MMFLOAT)(w - 1)) * 0.5 + gradient * (xend - x1);
+        xgap = 1 - (x1 + 0.5 - xend);
+        MMFLOAT xpxl2 = xend; // this will be used in the main loop
+        MMFLOAT ypxl2 = floor(yend);
+        fpart = yend - floor(yend);
+        rfpart = 1 - fpart;
+
+        if (steep) {
+            drawAAPixel((int)ypxl2, (int)xpxl2, rfpart * xgap, c);
+            for (int i = 1; i <= w; i++) drawAAPixel((int)ypxl2 + i, (int)xpxl2, 1, c);
+            drawAAPixel((int)ypxl2 + w, (int)xpxl2, fpart * xgap, c);
+        }
+        else {
+            drawAAPixel((int)xpxl2, (int)ypxl2, rfpart * xgap, c);
+            for (int i = 1; i <= w; i++) drawAAPixel((int)xpxl2, (int)ypxl2 + i, 1, c);
+            drawAAPixel((int)xpxl2, (int)ypxl2 + w, fpart * xgap, c);
+        }
+        // main loop
+        if (steep) {
+            for (int x = (int)xpxl1 + 1; x <= (int)xpxl2; x++) {
+                fpart = intery - floor(intery);
+                rfpart = 1 - fpart;
+                MMFLOAT y = floor(intery);
+                drawAAPixel((int)y, x, rfpart, c);
+                for (int i = 1; i <= w; i++) drawAAPixel((int)y + i, x, 1, c);
+                drawAAPixel((int)y + w, x, fpart, c);
+                intery = intery + gradient;
+            }
+        }
+        else {
+            for (int x = (int)xpxl1 + 1; x <= (int)xpxl2; x++) {
+                fpart = intery - floor(intery);
+                rfpart = 1 - fpart;
+                MMFLOAT y = floor(intery);
+                drawAAPixel(x, (int)y, rfpart, c);
+                for (int i = 1; i <= w; i++) drawAAPixel(x, (int)y + i, 1, c);
+                drawAAPixel(x, (int)y + w, fpart, c);
+                intery = intery + gradient;
+            }
+        }
+    }
+
 
     void cmd_line(void) {
         if (CMM1) {
@@ -1527,8 +1642,24 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             lastx = x2; lasty = y2;											// save in case the user wants the last value
         }
         else {
+            unsigned char* p;
             int x1, y1, x2, y2, w = 0, n = 0, i, nc = 0, nw = 0;
             int64_t c = 0;
+            if ((p = checkstring(cmdline, (unsigned char *)"AA"))) {
+                MMFLOAT x1, y1, x2, y2;
+                getargs(&p, 11, (unsigned char*)",");
+                c = gui_fcolour; ;  w = 1;                                         // setup the defaults
+                x1 = getnumber(argv[0]);
+                y1 = getnumber(argv[2]);
+                x2 = getnumber(argv[4]);
+                y2 = getnumber(argv[6]);
+                if (argc > 7 && *argv[8]) {
+                    w = (int)getint(argv[8], 1, 100);
+                }
+                if (argc == 11) c = (int64_t)getint(argv[10], M_CLEAR, M_WHITE);
+                drawAALine(x1, y1, x2, y2, (int)c, w);
+                return;
+            }
             long long int* x1ptr = NULL, * y1ptr = NULL, * x2ptr = NULL, * y2ptr = NULL, * wptr = NULL, * cptr = NULL;
             MMFLOAT* x1fptr = NULL, * y1fptr = NULL, * x2fptr = NULL, * y2fptr = NULL, * wfptr = NULL, * cfptr = NULL;
             getargs(&cmdline, 11, (unsigned char*)",");

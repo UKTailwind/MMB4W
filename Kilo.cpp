@@ -2020,7 +2020,7 @@ void cmd_newedit(void) {
 	FreeMemorySafe((void**)&main_turtle_polyX);
 	FreeMemorySafe((void**)&main_turtle_polyY);
 	if (!(*cmdline == 0 || *cmdline == '\'')) {
-		fullfilename((char*)getCstring(cmdline), q, NULL);
+		fullfilename((char*)getFstring(cmdline), q, NULL);
 		if (strchr(q, '.') == NULL) {
 			fr = existsfile(q);
 			if (!fr)strcat(q, ".BAS");

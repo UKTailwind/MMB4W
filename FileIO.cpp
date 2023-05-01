@@ -40,7 +40,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "picojpeg.h"
 #include "upng.h"
 #include "Shlwapi.h"
-
+extern "C" unsigned char* getFstring(unsigned char* p);
 extern "C" uint8_t BMP_bDecode(int x, int y, int fnbr); 
 void tidypath(char* p, char* qq);
 int dirflags;
@@ -82,10 +82,10 @@ int nDefines;
 int LineCount = 0;
 extern int opensocket;
 extern int client_fd;
-int udpopen = 0,tcpopen = 0;
-SOCKET udpsockfd, tcpsockfd;
+int telnetopen = 0,tcpopen = 0;
+SOCKET telnetsockfd, tcpsockfd;
 ;
-struct sockaddr_in si_me, si_other, tcp_other;
+struct sockaddr_in si_me, si_other, tcp_other, telnet_other;
 
 struct option_s Option;
 extern "C" void ResetOptions(void) {
@@ -396,7 +396,7 @@ void importfile(unsigned char* path, unsigned char* filename, unsigned char** p,
     if ((q = strchr((char *)filename, 34)) == 0) error((char *)"Syntax");
     q++;
     if ((q = strchr(q, 34)) == 0) error((char *)"Syntax");
-    fname = (char *)getCstring(filename);
+    fname = (char *)getFstring(filename);
     strcpy(qq, fname);
     for (int i = 0; i < (int)strlen(qq); i++) if(qq[i] == '/')qq[i] = '\\';
     if (!(qq[1] == ':' || qq[0] == '\\')) { //filename is relative path to "path"
@@ -558,7 +558,7 @@ int FileLoadProgram(unsigned char* fn, int mode) {
         }
     }
     else {
-        p = (char*)getCstring(fn);
+        p = (char*)getFstring(fn);
         strcpy(buff, p);
         tidyfilename(buff, path, name,0);
         strcpy(buff, path);
@@ -718,7 +718,7 @@ void LoadImage(unsigned char* p) {
     getargs(&p, 5, (unsigned char*)",");                                            // this MUST be the first executable line in the function
     if (argc == 0) error((char*)"Argument count");
 
-    p = getCstring(argv[0]);                                        // get the file name
+    p = getFstring(argv[0]);                                        // get the file name
     int maxH = PageTable[WritePage].ymax;
     fullfilename((char*)p, fname, ".BMP");
     xOrigin = yOrigin = 0;
@@ -779,7 +779,7 @@ void LoadJPGImage(unsigned char* p) {
     getargs(&p, 5, (unsigned char *)",");                                            // this MUST be the first executable line in the function
     if (argc == 0) error((char *)"Argument count");
 
-    p = getCstring(argv[0]);                                        // get the file name
+    p = getFstring(argv[0]);                                        // get the file name
     fullfilename((char*)p, fname, ".JPG");
     xOrigin = yOrigin = 0;
     if (argc >= 3) xOrigin = (int)getint(argv[2], 0, HRes - 1);                    // get the x origin (optional) argument
@@ -942,7 +942,7 @@ void LoadPNG(unsigned char* p) {
     getargs(&p, 7, (unsigned char *)",");                                            // this MUST be the first executable line in the function
     if (argc == 0) error((char *)"Argument count");
 
-    p = getCstring(argv[0]);                                        // get the file name
+    p = getFstring(argv[0]);                                        // get the file name
     fullfilename((char*)p, fname, ".PNG");
 
     xOrigin = yOrigin = 0;
@@ -1015,7 +1015,7 @@ void cmd_load(void) {
         char fname[STRINGSIZE] = { 0 };
         getargs(&p, 3, (unsigned char*)",");
         if (argc != 3)error((char*)"Syntax");
-        pp = (char *)getCstring(argv[0]);
+        pp = (char *)getFstring(argv[0]);
         fullfilename((char*)pp, fname, ".DAT");
         uint32_t address = (GetPokeAddr(argv[2]) & 0b11111111111111111111111111111100);
         fnbr = FindFreeFileNbr();
@@ -1314,7 +1314,7 @@ void cmd_files(void) {
     if (*cmdline) {
         getargs(&cmdline, 3, (unsigned char *)",");
         if (!(argc == 1 || argc == 3))error((char*)"Syntax");
-        p = (char*)getCstring(argv[0]);
+        p = (char*)getFstring(argv[0]);
         strcpy(q, p);
         if (q[strlen(q) - 1] == '/' || q[strlen(q) - 1] == '\\')strcat(q, "*");
         if (argc == 3) {
@@ -1348,7 +1348,7 @@ void cmd_chdir(void) {
     char* p;
     int i = 0;
     DWORD j = 0;
-    p = (char *)getCstring(cmdline);
+    p = (char *)getFstring(cmdline);
     // get the directory name and convert to a standard C string
     tidypath(p, qq);
     if (!dirExists(p))error((char*)"Directory does not exist");
@@ -1421,7 +1421,7 @@ void cmd_save(void) {
         unsigned char bmpinfoheader[40] = { 40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0 };
         char bmppad[3] = { 0,0,0 };
         getargs(&p, 9, (unsigned char*)",");
-        pp = getCstring(argv[0]);
+        pp = getFstring(argv[0]);
         fullfilename((char *)pp, filename, ".BMP");
         if (argc != 1 && argc != 9)error((char*)"Syntax");
         if (!BasicFileOpen(filename, fnbr, (char *)"wb")) return;
@@ -1470,21 +1470,7 @@ void cmd_save(void) {
         return;
     }
     error((char *)"Syntax");
-/*    else {
-        unsigned char b[STRINGSIZE];
-        p = getCstring(cmdline);                           // get the file name and change to the directory
-        if (strchr((char *)p, '.') == NULL) strcat((char*)p, ".BAS");
-        if (!BasicFileOpen((char *)p, fnbr, (char*)"w")) return;
-        p = ProgMemory;
-        while (!(*p == 0 || *p == 0xff)) {                           // this is a safety precaution
-            p = llist(b, p);                                        // expand the line
-            pp = b;
-            while (*pp) MMfputc(*pp++, fnbr);                    // write the line to the SD card
-            MMfputc('\n', fnbr);       // terminate the line
-            if (p[0] == 0 && p[1] == 0) break;                       // end of the listing ?
-        }
-        MMfclose(fnbr);
-    }*/
+
 }
 void cmd_open(void) {
     int32_t fnbr;
@@ -1497,7 +1483,7 @@ void cmd_open(void) {
     ss[2] = 0;
     // start a new block
     getargs(&cmdline, 5, ss);									// getargs macro must be the first executable stmt in a block
-    fname = (char *)getCstring(argv[0]);
+    fname = (char *)getFstring(argv[0]);
     fullfilename(fname, filename, NULL);
     if (!(argc == 3 || argc == 5)) error((char*)"Syntax");
     if (argc == 5) {
@@ -1553,7 +1539,7 @@ void cmd_seek(void) {
 }
 void cmd_kill(void) {
     unsigned char* p;
-    p = getCstring(cmdline);										// get the file name and convert to a standard C string
+    p = getFstring(cmdline);										// get the file name and convert to a standard C string
     if (remove((char *)p)) error((char *)"Failed to delete: check case");
 }
 
@@ -1671,8 +1657,8 @@ void cmd_name(void) {
     {																// start a new block
         getargs(&cmdline, 3, ss);									// getargs macro must be the first executable stmt in a block
         if (argc != 3) error((char*)"Syntax");
-        oldf = getCstring(argv[0]);									// get the old file name and convert to a standard C string
-        newf = getCstring(argv[2]);									// get the new file name and convert to a standard C string
+        oldf = getFstring(argv[0]);									// get the old file name and convert to a standard C string
+        newf = getFstring(argv[2]);									// get the new file name and convert to a standard C string
         errno = 0;
         if (rename((char*)oldf, (char*)newf))error((char*)"Failed to rename: check case");
     }
@@ -1693,8 +1679,8 @@ void cmd_copy(void) {
     {
         getargs(&cmdline, 3, ss);                                   // getargs macro must be the first executable stmt in a block
         if (argc != 3) error((char*)"Syntax");
-        oldf = getCstring(argv[0]);                                  // get the old file name and convert to a standard C string
-        newf = getCstring(argv[2]);                                  // get the new file name and convert to a standard C string
+        oldf = getFstring(argv[0]);                                  // get the old file name and convert to a standard C string
+        newf = getFstring(argv[2]);                                  // get the new file name and convert to a standard C string
         fullfilename((char *)oldf, oldfilename, NULL);
         fullfilename((char*)newf, newfilename, NULL);
         of = FindFreeFileNbr();
@@ -1743,7 +1729,7 @@ void fun_dir(void) {
     if (argc != 0) {
         char ts[STRINGSIZE];
         found_OK = 0;
-        p=getCstring(argv[0]);
+        p=getFstring(argv[0]);
         // get the directory name and convert to a standard C string
         tidypath((char *)p, ts);
         if (hFind) {
@@ -1826,7 +1812,7 @@ void fun_dir(void) {
 void cmd_mkdir(void) {
     char* qq = (char*)GetTempMemory(STRINGSIZE);
     char* p;
-    p = (char*)getCstring(cmdline);
+    p = (char*)getFstring(cmdline);
     // get the directory name and convert to a standard C string
     tidypath(p, qq);
     if (!CreateDirectoryA((LPCSTR)qq, NULL )) error((char *)"Unable to create directory");
@@ -1834,7 +1820,7 @@ void cmd_mkdir(void) {
 void cmd_rmdir(void) {
     char* qq = (char*)GetTempMemory(STRINGSIZE);
     char* p;
-    p = (char*)getCstring(cmdline);
+    p = (char*)getFstring(cmdline);
     // get the directory name and convert to a standard C string
     tidypath(p, qq);
     if(!dirExists((const char*) qq)) error((char *)"Directory does not exist");
@@ -1923,83 +1909,207 @@ void cmd_tcp(void) {
     error((char *)"Syntax");
 
 }
-void cmd_udp(void) {
+void cmd_telnet(void) {
+    unsigned char* tp;
+    char* telnet_SERVER;
+    static int telnet_server_PORT;//, tcp_client_PORT;
+//    const socklen_t slen = sizeof(struct sockaddr_in);
+    tp = checkstring(cmdline, (unsigned char*)"CLIENT");
+    if (tp) {
+        getargs(&tp, 3, (unsigned char*)",");
+        if (argc != 3)error((char*)"Syntax");
+        if (telnetopen)error((char*)"Already open");
+        char* ip=NULL;
+        struct hostent* he;
+        telnet_SERVER = (char*)getCstring(argv[0]);
+        if (!isalpha(*telnet_SERVER) && strchr(telnet_SERVER, '.') && strchr(telnet_SERVER, '.') < telnet_SERVER + 4) {
+            ip = telnet_SERVER;
+        } else {
+
+            if ((he = gethostbyname(telnet_SERVER)) == NULL)
+            {
+                // get the host info
+                error((char*)"Not Found");
+            }
+            ip = inet_ntoa(*(struct in_addr*)*he->h_addr_list);
+            
+        }
+        telnet_server_PORT = (int)getint(argv[2], 1, 65535);
+        telnetsockfd = INVALID_SOCKET;
+        memset((char*)&telnet_other, 0, sizeof(telnet_other));
+        telnet_other.sin_addr.s_addr = inet_addr(ip);
+        telnet_other.sin_port = htons(telnet_server_PORT);
+        telnet_other.sin_family = AF_INET;
+        telnetopen = 1;
+        if ((telnetsockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET)
+            error((char*)"Socket not opened");
+        if (connect(telnetsockfd, (const struct sockaddr*)&telnet_other, sizeof(struct sockaddr_in)) == -1) {
+            MMPrintString(inet_ntoa(tcp_other.sin_addr)); PRet();
+            PInt(ntohs(telnet_other.sin_port)); PRet();
+            error((char*)"connect failed %", WSAGetLastError());
+        }
+        int iResult;
+        u_long iMode = 1;
+        iResult = ioctlsocket(telnetsockfd, FIONBIO, &iMode);
+        if (iResult != NO_ERROR)
+            printf("ioctlsocket failed with error: %ld\n", iResult);
+
+
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"SEND");
+    if (tp) {
+        char Telnetbuff[STRINGSIZE*2];
+        char* instr;
+        getargs((unsigned char**)&tp, 1, (unsigned char*)",");
+        if (argc != 1)error((char*)"Syntax");
+        if (telnetopen == 0)error((char*)"Not open");
+        instr = (char*)getCstring(argv[0]);
+        for (int i = 0, Telnetpos = 0; i < (int)strlen(instr); i++) {
+            char c = instr[i];
+            Telnetbuff[Telnetpos] = c;
+            Telnetpos++;
+            if (c == 255) {
+                Telnetbuff[Telnetpos] = c;
+                Telnetpos++;
+            }
+            if (c == 13) {
+                Telnetbuff[Telnetpos] = 0;
+                Telnetpos++;
+            }
+
+        }
+        if (send(telnetsockfd, Telnetbuff, strlen(Telnetbuff), 0) < 0) {
+            error((char*)"send() failed");
+            return;
+        }
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"RECEIVE");
+    if (tp) {
+        unsigned char* retstring;
+        int i = 0, lastchar = -1;
+        int str1len, bytesRcvd;
+        getargs((unsigned char**)&tp, 1, (unsigned char*)",");
+        if (argc != 1)error((char*)"Syntax");
+        if (telnetopen == 0)error((char*)"Not open");
+        retstring = (unsigned char*)findvar(argv[0], V_FIND);
+        if (!(vartbl[VarIndex].type & T_STR)) error((char*)"Invalid variable");
+        str1len = (vartbl[VarIndex].size);
+        memset(retstring, 0, str1len);
+        char* p = (char *)retstring;
+        while ((bytesRcvd = recv(telnetsockfd, (char*)p, str1len - 1- ((uint32_t)p - (uint32_t)retstring), 0)) > 0) {
+            p += bytesRcvd;
+            uSec(100);
+        }
+        uint32_t count = (uint32_t)p - (uint32_t)retstring;
+        uint32_t newcount = count;
+        if (count>2) {
+            for (int i = 0; i < count - 2; i++) {
+                if (retstring[i] == '\r' && retstring[i + 1] == 0 && retstring[i + 2] == '\n') {
+                    memmove(&retstring[i + 1], &retstring[i + 2], newcount - (i + 2));
+                    newcount--;
+                }
+            }
+        }
+        count = newcount;
+        if (count > 1) {
+            for (int i = 0; i < count - 1; i++) {
+                if (retstring[i] == 255 && retstring[i + 1] == 255) {
+                    memmove(&retstring[i], &retstring[i + 1], newcount - (i + 1));
+                    newcount--;
+                }
+            }
+        }
+        memmove(&retstring[1], retstring, newcount);
+        retstring[0] = newcount;
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"CLOSE");
+    if (tp) {
+        if (telnetopen == 0)error((char*)"Not open");
+        telnetopen = 0;
+        closesocket(telnetsockfd);
+        return;
+
+    }
+    error((char*)"Syntax");
     /*
     unsigned char* tp;
-    char *udp_SERVER;
-    static int udp_server_PORT, udp_client_PORT;
+    char *telnet_SERVER;
+    static int telnet_server_PORT, telnet_client_PORT;
     unsigned long mode = 1;
     const socklen_t slen = sizeof(struct sockaddr_in);
     tp = checkstring(cmdline, (unsigned char*)"CLIENT");
     if (tp) {
         getargs((unsigned char**)&tp, 5, (unsigned char*)",");
         if (argc != 5)error((char *)"Syntax");
-        if (udpopen)error((char *)"Already open");
-        udp_SERVER = (char *)getCstring(argv[0]);
-        udp_server_PORT = (int)getint(argv[2], 1, 65535);
-        udp_client_PORT = (int)getint(argv[4], 1, 65535);
+        if (telnetopen)error((char *)"Already open");
+        telnet_SERVER = (char *)getCstring(argv[0]);
+        telnet_server_PORT = (int)getint(argv[2], 1, 65535);
+        telnet_client_PORT = (int)getint(argv[4], 1, 65535);
         memset((char*)&si_me, 0, sizeof(si_me));
         memset((char*)&si_other, 0, sizeof(si_other));
-        udpopen = 1;
-        udpsockfd = 0;
-        if ((udpsockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+        telnetopen = 1;
+        telnetsockfd = 0;
+        if ((telnetsockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_telnet)) == -1)
             error((char *)"Socket not opened");
-        ioctlsocket(udpsockfd, FIONBIO, &mode);
-        if (udpsockfd < 0) error((char *)"ERROR opening socket");
+        ioctlsocket(telnetsockfd, FIONBIO, &mode);
+        if (telnetsockfd < 0) error((char *)"ERROR opening socket");
         si_other.sin_family = AF_INET;
-        si_other.sin_port = htons(udp_server_PORT);
-        if (InetPtonA(AF_INET, udp_SERVER, &si_other.sin_addr) == 0) {
+        si_other.sin_port = htons(telnet_server_PORT);
+        if (InetPtonA(AF_INET, telnet_SERVER, &si_other.sin_addr) == 0) {
             error((char *)"inet_aton() failed");
             return;
         }
         si_me.sin_family = AF_INET;
-        si_me.sin_port = htons(udp_client_PORT);
+        si_me.sin_port = htons(telnet_client_PORT);
         si_me.sin_addr.s_addr = htonl(INADDR_ANY);
-        if (bind(udpsockfd, (const struct sockaddr*)&si_me, sizeof(si_me)) == -1)
+        if (bind(telnetsockfd, (const struct sockaddr*)&si_me, sizeof(si_me)) == -1)
             error((char *)"Bind failed");
         return;
     }
     tp = checkstring(cmdline, (unsigned char*)"SERVER");
     if (tp) {
-        int udp_server_PORT;
+        int telnet_server_PORT;
         getargs((unsigned char**)&tp, 1, (unsigned char*)",");
         if (argc != 1)error((char *)"Syntax");
-        if (udpopen)error((char *)"Already open");
-        udpopen = 2;
-        udp_server_PORT = (int)getint(argv[0], 1, 65535);
-        if ((udpsockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+        if (telnetopen)error((char *)"Already open");
+        telnetopen = 2;
+        telnet_server_PORT = (int)getint(argv[0], 1, 65535);
+        if ((telnetsockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_telnet)) == -1)
             error((char *)"Socket not opened");
 
         memset((char*)&si_me, 0, sizeof(si_me));
         memset((char*)&si_other, 0, sizeof(si_other));
         si_me.sin_family = AF_INET;
-        si_me.sin_port = htons(udp_server_PORT);
+        si_me.sin_port = htons(telnet_server_PORT);
         si_me.sin_addr.s_addr = htonl(INADDR_ANY);
-        if (bind(udpsockfd, (const struct sockaddr*)&si_me, sizeof(si_me)) == -1)
+        if (bind(telnetsockfd, (const struct sockaddr*)&si_me, sizeof(si_me)) == -1)
             error((char *)"Bind failed");
-        ioctlsocket(udpsockfd, FIONBIO, &mode) ;
+        ioctlsocket(telnetsockfd, FIONBIO, &mode) ;
         return;
     }
     tp = checkstring(cmdline, (unsigned char*)"CLOSE");
     if (tp) {
-        if (udpopen == 0)error((char *)"Not open");
-        udpopen = 0;
-        if (udpopen == 1) {
-            closesocket(udp_server_PORT);
-            closesocket(udp_client_PORT);
+        if (telnetopen == 0)error((char *)"Not open");
+        telnetopen = 0;
+        if (telnetopen == 1) {
+            closesocket(telnet_server_PORT);
+            closesocket(telnet_client_PORT);
         }
-        else closesocket(udpsockfd);
+        else closesocket(telnetsockfd);
         return;
     }
     tp = checkstring(cmdline, (unsigned char*)"SEND");
     if (tp) {
-        char* udp_message;
+        char* telnet_message;
         getargs((unsigned char**)&tp, 1, (unsigned char*)",");
         if (argc != 1)error((char *)"Syntax");
-        if (udpopen == 0)error((char *)"Not open");
+        if (telnetopen == 0)error((char *)"Not open");
         if (si_other.sin_port == 0)error((char *)"No Client");
-        udp_message = (char *)getCstring(argv[0]);
-        if (sendto(udpsockfd, udp_message, strlen(udp_message), 0, (struct sockaddr*)&si_other, slen) < 0) {
+        telnet_message = (char *)getCstring(argv[0]);
+        if (sendto(telnetsockfd, telnet_message, strlen(telnet_message), 0, (struct sockaddr*)&si_other, slen) < 0) {
             error((char *)"sendto() failed");
             return;
         }
@@ -2012,7 +2122,7 @@ void cmd_udp(void) {
         uint64_t* otherport = NULL;
         getargs((unsigned char**)&tp, 5, (unsigned char*)",");
         if (argc > 5 || argc < 1)error((char *)"Syntax");
-        if (udpopen == 0)error((char *)"Not open");
+        if (telnetopen == 0)error((char *)"Not open");
         if (argc > 5) error((char *)"Incorrect number of arguments");
 
         // get the two variables
@@ -2030,9 +2140,9 @@ void cmd_udp(void) {
             otherport = (uint64_t *)findvar(argv[4], V_FIND);
             if (!((vartbl[VarIndex].type & T_NBR) || (vartbl[VarIndex].type & T_INT))) error((char *)"Invalid variable");
         }
-        if (udpopen == 0)error((char *)"Not open");
+        if (telnetopen == 0)error((char *)"Not open");
         int slen = sizeof(si_other);
-        if (recvfrom(udpsockfd, retstring, 255, 0, (struct sockaddr*)&si_other, (socklen_t*)&slen) == -1) {
+        if (recvfrom(telnetsockfd, retstring, 255, 0, (struct sockaddr*)&si_other, (socklen_t*)&slen) == -1) {
             retstring[0] = 0;
             if (argc >= 3)otheripadd[0] = 0;
             if (argc == 5)*otherport = 0;

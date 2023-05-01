@@ -580,7 +580,7 @@ void loadpng(unsigned char* p) {
     if (*argv[0] == '#') argv[0]++;
     bnbr = (int)getint(argv[0], 1, MAXBLITBUF - 1);
     if (blitbuff[bnbr].blitbuffptr == NULL) {
-        unsigned char* p = getCstring(argv[2]);
+        unsigned char* p = getFstring(argv[2]);
         if (argc == 5)deftrans = (int)getint(argv[4], 1, 15);
         upng = upng_new_from_file((char *)p);
         upng_header(upng);
@@ -727,7 +727,7 @@ void loadsprite(unsigned char* p) {
     char buff[256];
     getargs(&p, 3, (unsigned char *)",");
     fnbr = FindFreeFileNbr();
-    fname = (char*)getCstring(argv[0]);
+    fname = (char*)getFstring(argv[0]);
     if (argc == 3)startsprite = (int)getint(argv[2], 1, 64);
     fullfilename(fname, filename, ".SPR");
     if (!BasicFileOpen(filename, fnbr, (char *)"rb")) error((char *)"File not found");

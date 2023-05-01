@@ -1351,7 +1351,7 @@ void cmd_play(void) {
         if (CurrentlyPlaying != P_NOTHING) error((char *)"Sound output in use");
         sbuff1 = (char *)GetMemory(WAV_BUFFER_SIZE);
         sbuff2 = (char *)GetMemory(WAV_BUFFER_SIZE);
-        p = (char *)getCstring(argv[0]);                                    // get the file name
+        p = (char *)getFstring(argv[0]);                                    // get the file name
 		fullfilename(p, filename, ".MOD");
 		WAVInterrupt = NULL;
         WAVcomplete = 0;
@@ -1424,7 +1424,7 @@ void cmd_play(void) {
         if (!(argc == 1 || argc == 3)) error((char*)"Argument count");
         if (CurrentlyPlaying != P_NOTHING) error((char*)"Sound output in use");
 
-        p = (char *)getCstring(argv[0]);                                    // get the file name
+        p = (char *)getFstring(argv[0]);                                    // get the file name
 		if (!existsfile(p)) {
 			if (!*p)strcpy(p, ".\\");
 			if (dirExists(p)) {
@@ -1474,7 +1474,7 @@ void cmd_play(void) {
         if (!(argc == 1 || argc == 3)) error((char*)"Argument count");
         if (CurrentlyPlaying != P_NOTHING) error((char*)"Sound output in use");
 
-        p = (char*)getCstring(argv[0]);                                    // get the file name
+        p = (char*)getFstring(argv[0]);                                    // get the file name
 		if (!existsfile(p)) {
 			if (!*p)strcpy(p, ".\\");
 			if (dirExists(p)) {
@@ -1526,7 +1526,7 @@ void cmd_play(void) {
 
         if (CurrentlyPlaying != P_NOTHING) error((char*)"Sound output in use");
 
-        p = (char*)getCstring(argv[0]);                                    // get the file name
+        p = (char*)getFstring(argv[0]);                                    // get the file name
 		if (!existsfile(p)) {
 			if (!*p)strcpy(p, ".\\");
 			if (dirExists(p)) {
@@ -1579,7 +1579,7 @@ void cmd_play(void) {
 
 		if (!(CurrentlyPlaying == P_MOD)) error((char *)"Effects play over MOD file");
 
-		p = (char *)getCstring(argv[0]);                                    // get the file name
+		p = (char *)getFstring(argv[0]);                                    // get the file name
 		fullfilename(p, filename, ".WAV");
 		WAVInterrupt = NULL;
 

@@ -118,6 +118,7 @@ extern "C" void FloatToStr(char* p, MMFLOAT f, int m, int n, unsigned char ch);
 extern "C" unsigned char* evaluate(unsigned char* p, MMFLOAT * fa, long long int* ia, unsigned char** sa, int* ta, int flags);
 extern "C" unsigned char* checkstring(unsigned char* p, unsigned char* tkn);
 extern "C" unsigned char* getCstring(unsigned char* p);
+extern "C" unsigned char* getFstring(unsigned char* p);
 extern "C" unsigned char* MtoC(unsigned char* p);
 extern "C" int FloatToInt32(MMFLOAT x);
 extern "C" void* findvar(unsigned char* p, int action);
@@ -193,6 +194,8 @@ extern unsigned char* CurrentLinePtr;                                           
 extern unsigned char* subfun[];
 extern char CurrentSubFunName[];
 extern char CurrentInterruptName[];
+extern int OptionEscape;
+
 extern unsigned char OptionExplicit;                                                // used to force the declaration of variables before their use
                             // longjump to recover from an error
 

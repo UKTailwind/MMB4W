@@ -521,7 +521,7 @@ void cmd_list(void) {
 		if(!(*p == 0 || *p == '\'')) {
 			getargs(&p, 1, (unsigned char *)",");
 			char* buff = (char *)GetTempMemory(STRINGSIZE);
-			strcpy(buff, (const char *)getCstring(argv[0]));
+			strcpy(buff, (const char *)getFstring(argv[0]));
 			if(strchr(buff, '.') == NULL) strcat(buff, ".BAS");
 			ListProgram((unsigned char*)buff, true);
 		}
@@ -563,14 +563,14 @@ void cmd_list(void) {
 	else if ((p = checkstring(cmdline, (unsigned char*)"FILE ALL"))) {
 		getargs(&p, 1, (unsigned char*)",");
 		char* buff = (char*)GetTempMemory(STRINGSIZE);
-		strcpy(buff, (char*)getCstring(argv[0]));
+		strcpy(buff, (char*)getFstring(argv[0]));
 		if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
 		ListProgram((unsigned char*)buff, true);
 	}
 	else if ((p = checkstring(cmdline, (unsigned char*)"FILE"))) {
 		getargs(&p, 1, (unsigned char *)",");
 		char* buff = (char *)GetTempMemory(STRINGSIZE);
-		strcpy(buff, (char *)getCstring(argv[0]));
+		strcpy(buff, (char *)getFstring(argv[0]));
 		if (strchr(buff, '.') == NULL) strcat(buff, ".BAS");
 		ListProgram((unsigned char *)buff, false);
 	}
@@ -633,7 +633,7 @@ void cmd_list(void) {
 		if(!(*cmdline == 0 || *cmdline == '\'')) {
 			getargs(&cmdline, 1, (unsigned char *)",");
 			char* buff = (char *)GetTempMemory(STRINGSIZE);
-			strcpy(buff, (const char*)getCstring(argv[0]));
+			strcpy(buff, (const char*)getFstring(argv[0]));
 			if(strchr(buff, '.') == NULL) strcat(buff, ".BAS");
 			ListProgram((unsigned char*)buff, false);
 		}
@@ -829,12 +829,20 @@ static void cmd_run_transform_legacy_args(char *run_args) {
  *
  * @param[in]   p         pointer to the buffer.
  * @param[out]  filename  buffer to hold the filename, should be at least STRINGSIZE.
- * @param[out]  run_args  buffer to hold the RUN args, should be at least STRINGSIZE.
+ * @param[in,out]  run_args  buffer to hold the RUN args, should be at least STRINGSIZE.
+ *                             on entry: the RUN args that were passed to the current program.
+ *                             on exit:  the RUN args to pass to the new program.
  */
 void cmd_run_parse_args(const char *p, char *filename, char *run_args) {
     *filename = '\0';
-    *run_args = '\0';
-    if (!*p) return;
+
+    // WARNING! do not naively clear 'run_args' at the start of this function,
+    // its existing value may need to be evaluated to calculate its new value.
+
+    if (!*p) {
+        *run_args = '\0';
+        return;
+    }
 
     getargs((unsigned char **) &p, 3, (unsigned char *) ",");
     int filename_idx = -1;  // Index into argv[] for filename.
@@ -843,7 +851,7 @@ void cmd_run_parse_args(const char *p, char *filename, char *run_args) {
     // Note for legacy compatibility we need to allow the trailing comma.
     if (argc == 1 && *(argv[0]) == ',') {
         // RUN ,
-        // Don't set filename or cmd_run_args.
+        // 'filename' and 'cmd_run_args' will both be cleared.
     } else if (argc == 1) {
         // RUN file$
         if (*(argv[0]) != ',') filename_idx = 0;
@@ -862,7 +870,7 @@ void cmd_run_parse_args(const char *p, char *filename, char *run_args) {
         return;
     }
 
-    if (filename_idx >= 0) strcpy(filename, (char *) getCstring(argv[0]));
+    if (filename_idx >= 0) strcpy(filename, (char *) getFstring(argv[0]));
 
     if (run_args_idx >= 0) {
         if (cmd_run_is_legacy_args(filename, (char *) argv[run_args_idx])) {
@@ -871,6 +879,8 @@ void cmd_run_parse_args(const char *p, char *filename, char *run_args) {
         } else {
             strcpy(run_args, (char *) getCstring(argv[run_args_idx]));
         }
+    } else {
+        *run_args = '\0';
     }
 }
 
@@ -1998,20 +2008,89 @@ search_again:
 				goto search_again;
 			}
 			CurrentLinePtr = lineptr;
-			if(vtype[vidx] & T_STR) {
-				char* p1, * p2;
-				if(*argv[NextData] == '"') {                               // if quoted string
-					for (len = 0, p1 = vtbl[vidx], p2 = (char*)argv[NextData] + 1; *p2 && *p2 != '"'; len++, p1++, p2++) {
-						*p1 = *p2;                                   // copy up to the quote
+			if (vtype[vidx] & T_STR) {
+				unsigned char* p1, * p2;
+				if (*argv[NextData] == '"') {                               // if quoted string
+					int toggle = 0;
+					for (len = 0, p1 = (unsigned char *)vtbl[vidx], p2 = argv[NextData] + 1; *p2 && *p2 != '"'; len++) {
+						if (*p2 == '\\' && p2[1] != '"' && OptionEscape)toggle ^= 1;
+						if (toggle) {
+							if (*p2 == '\\' && isdigit(p2[1]) && isdigit(p2[2]) && isdigit(p2[3])) {
+								p2++;
+								i = (*p2++) - 48;
+								i *= 10;
+								i += (*p2++) - 48;
+								i *= 10;
+								i += (*p2++) - 48;
+								*p1++ = i;
+							}
+							else {
+								p2++;
+								switch (*p2) {
+								case '\\':
+									*p1++ = '\\';
+									p2++;
+									break;
+								case 'a':
+									*p1++ = '\a';
+									p2++;
+									break;
+								case 'b':
+									*p1++ = '\b';
+									p2++;
+									break;
+								case 'f':
+									*p1++ = '\f';
+									p2++;
+									break;
+								case 'n':
+									*p1++ = '\n';
+									p2++;
+									break;
+								case 'q':
+									*p1++ = '\"';
+									p2++;
+									break;
+								case 'r':
+									*p1++ = '\r';
+									p2++;
+									break;
+								case 't':
+									*p1++ = '\t';
+									p2++;
+									break;
+								case 'v':
+									*p1++ = '\v';
+									p2++;
+									break;
+								case '&':
+									p2++;
+									if (isxdigit(*p2) && isxdigit(p2[1])) {
+										i = 0;
+										i = (i << 4) | ((mytoupper(*p2) >= 'A') ? mytoupper(*p2) - 'A' + 10 : *p2 - '0');
+										p++;
+										i = (i << 4) | ((mytoupper(*p2) >= 'A') ? mytoupper(*p2) - 'A' + 10 : *p2 - '0');
+										p2++;
+										*p1++ = i;
+									}
+									else *p1++ = 'x';
+									break;
+								default:
+									*p1++ = *p2++;
+								}
+							}
+							toggle = 0;
+						}
+						else *p1++ = *p2++;
 					}
 				}
 				else {                                            // else if not quoted
-					for (len = 0, p1 = vtbl[vidx], p2 = (char*)argv[NextData]; *p2 && *p2 != '\''; len++, p1++, p2++) {
-						if(*p2 < 0x20 || *p2 >= 0x7f) error((char *)"Invalid character");
+					for (len = 0, p1 = (unsigned char *)vtbl[vidx], p2 = argv[NextData]; *p2 && *p2 != '\''; len++, p1++, p2++) {
+						if (*p2 < 0x20 || *p2 >= 0x7f) error((char *)"Invalid character");
 						*p1 = *p2;                                  // copy up to the comma
 					}
 				}
-				if(len > vsize[vidx]) error((char *)"String too long");
+				if (len > vsize[vidx]) error((char*)"String too long");
 				*p1 = 0;                                            // terminate the string
 				CtoM((unsigned char*)vtbl[vidx]);                                   // convert to a MMBasic string
 			}
@@ -2499,7 +2578,7 @@ unsigned char* llist(unsigned char* b, unsigned char* p) {
 unsigned char* GetFileName(unsigned char* CmdLinePtr, unsigned char* LastFilePtr) {
 	unsigned char* tp, * t;
 
-	if(CurrentLinePtr) return getCstring(CmdLinePtr);               // if running a program get the filename as an expression
+	if(CurrentLinePtr) return getFstring(CmdLinePtr);               // if running a program get the filename as an expression
 
 	// if we reach here we are in immediate mode
 	if(*CmdLinePtr == 0 && LastFilePtr != NULL) return LastFilePtr; // if the command line is empty and we have a pointer to the last file, return that

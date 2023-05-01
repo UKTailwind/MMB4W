@@ -45,7 +45,7 @@ void cmd_rmdir(void);
 void cmd_kill(void);
 void cmd_newedit(void);
 void cmd_system(void);
-void cmd_udp(void);
+void cmd_telnet(void);
 void cmd_tcp(void);
 void fun_getip(void);
 #endif
@@ -69,7 +69,7 @@ void fun_getip(void);
 { (unsigned char*)"Kill",		T_CMD,				0, cmd_kill },
 { (unsigned char*)"Edit",   T_CMD,              0, cmd_newedit },
 { (unsigned char*)"System",   T_CMD,              0, cmd_system },
-{ (unsigned char*)"UDP",   T_CMD,              0, cmd_udp },
+{ (unsigned char*)"TELNET",   T_CMD,              0, cmd_telnet },
 { (unsigned char*)"TCP",   T_CMD,              0, cmd_tcp },
 
 #endif
@@ -163,7 +163,7 @@ extern "C" bool dirExists(const char* dirName_in);
 extern "C" void tidypath(char* p, char* qq);
 extern char lastfileedited[STRINGSIZE];
 extern union uFileTable FileTable[MAXOPENFILES + 1];
-extern int udpopen , tcpopen ;
+extern int telnetopen , tcpopen ;
 
 #endif
 #endif

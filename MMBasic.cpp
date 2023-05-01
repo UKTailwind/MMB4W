@@ -1030,9 +1030,80 @@ unsigned char *getvalue(unsigned char* p, MMFLOAT* fa, long long int* ia, unsign
         // if it is a string constant, return a pointer to that.  Note: tokenise() guarantees that strings end with a quote
         else if (*p == '"') {
             p++;                                                        // step over the quote
-            p1 = s = (unsigned char*)GetTempMemory(STRINGSIZE);                                // this will last for the life of the command
-            tp = (unsigned char *)strchr((char *)p, '"');
-            while (p != tp) *p1++ = *p++;
+            p1 = s = (unsigned char *)GetTempMemory(STRINGSIZE);                                // this will last for the life of the command
+            tp = (unsigned char *)strchr((const char *)p, '"');
+            int toggle = 0;
+            while (p != tp) {
+                if (*p == '\\' && tp > p + 1 && OptionEscape)toggle ^= 1;
+                if (toggle) {
+                    if (*p == '\\' && isdigit(p[1]) && isdigit(p[2]) && isdigit(p[3])) {
+                        p++;
+                        i = (*p++) - 48;
+                        i *= 10;
+                        i += (*p++) - 48;
+                        i *= 10;
+                        i += (*p++) - 48;
+                        *p1++ = i;
+                    }
+                    else {
+                        p++;
+                        switch (*p) {
+                        case '\\':
+                            *p1++ = '\\';
+                            p++;
+                            break;
+                        case 'a':
+                            *p1++ = '\a';
+                            p++;
+                            break;
+                        case 'b':
+                            *p1++ = '\b';
+                            p++;
+                            break;
+                        case 'f':
+                            *p1++ = '\f';
+                            p++;
+                            break;
+                        case 'n':
+                            *p1++ = '\n';
+                            p++;
+                            break;
+                        case 'q':
+                            *p1++ = '\"';
+                            p++;
+                            break;
+                        case 'r':
+                            *p1++ = '\r';
+                            p++;
+                            break;
+                        case 't':
+                            *p1++ = '\t';
+                            p++;
+                            break;
+                        case 'v':
+                            *p1++ = '\v';
+                            p++;
+                            break;
+                        case '&':
+                            p++;
+                            if (isxdigit(*p) && isxdigit(p[1])) {
+                                i = 0;
+                                i = (i << 4) | ((mytoupper(*p) >= 'A') ? mytoupper(*p) - 'A' + 10 : *p - '0');
+                                p++;
+                                i = (i << 4) | ((mytoupper(*p) >= 'A') ? mytoupper(*p) - 'A' + 10 : *p - '0');
+                                p++;
+                                *p1++ = i;
+                            }
+                            else *p1++ = 'x';
+                            break;
+                        default:
+                            *p1++ = *p++;
+                        }
+                    }
+                    toggle = 0;
+                }
+                else *p1++ = *p++;
+            }
             p++;
             CtoM(s);                                                    // convert to a MMBasic string
             t = T_STR;
@@ -1201,6 +1272,14 @@ extern "C" unsigned char *getstring(unsigned char* p) {
 extern "C" unsigned char *getCstring(unsigned char* p) {
     unsigned char* tp;
     tp = (unsigned char *)GetTempMemory(STRINGSIZE);                                        // this will last for the life of the command
+    Mstrcpy(tp, getstring(p));                                      // get the string and save in a temp place
+    MtoC(tp);                                                       // convert to a C style string
+    return tp;
+}
+extern "C" unsigned char *getFstring(unsigned char* p) {
+    unsigned char* tp;
+    tp = (unsigned char*)GetTempMemory(STRINGSIZE);                                        // this will last for the life of the command
+    for (int i = 1; i <= *p; i++)if (p[i] == '\\')p[i] = '/';
     Mstrcpy(tp, getstring(p));                                      // get the string and save in a temp place
     MtoC(tp);                                                       // convert to a C style string
     return tp;
@@ -2604,6 +2683,8 @@ extern "C" int TraceLines(char* target) {
 // the argument p must point to the first line to be executed
 extern "C" void ExecuteProgram(unsigned char* p) {
     int i, SaveLocalIndex = 0;
+    jmp_buf SaveErrNext;
+    memcpy(SaveErrNext, ErrNext, sizeof(jmp_buf));                  // we call ExecuteProgram() recursively so we need to store/restore old jump buffer between calls
     skipspace(p);                                                   // just in case, skip any whitespace
 
     while (SystemMode != MODE_STOPTHREADS) {
@@ -2656,8 +2737,8 @@ extern "C" void ExecuteProgram(unsigned char* p) {
             skipspace(cmdline);
             skipelement(nextstmt);
             if (*p && *p != '\'') {                                  // ignore a comment line
+                SaveLocalIndex = LocalIndex;                    // save this if we need to cleanup after an error
                 if (OptionErrorSkip == 0) {
-                    SaveLocalIndex = LocalIndex;                    // save this if we need to cleanup after an error
                     if (*p >= C_BASETOKEN && *p - C_BASETOKEN < CommandTableSize - 1 && (commandtbl[*p - C_BASETOKEN].type & T_CMD)) {
                         cmdtoken = *p;
                         targ = T_CMD;
@@ -2675,7 +2756,6 @@ extern "C" void ExecuteProgram(unsigned char* p) {
                 }
                 else {
                     if (setjmp(ErrNext) == 0) {                          // return to the else leg of this if error and OPTION ERROR SKIP/IGNORE is in effect
-                        SaveLocalIndex = LocalIndex;                    // save this if we need to cleanup after an error
                         if (*p >= C_BASETOKEN && *p - C_BASETOKEN < CommandTableSize - 1 && (commandtbl[*p - C_BASETOKEN].type & T_CMD)) {
                             cmdtoken = *p;
                             targ = T_CMD;
@@ -2703,8 +2783,9 @@ extern "C" void ExecuteProgram(unsigned char* p) {
             }
             p = nextstmt;
         }
-        if ((p[0] == 0 && p[1] == 0) || (p[0] == 0xff && p[1] == 0xff)) return;      // the end of the program is marked by TWO zero chars, empty flash by two 0xff
+        if ((p[0] == 0 && p[1] == 0) || (p[0] == 0xff && p[1] == 0xff)) break;      // the end of the program is marked by TWO zero chars, empty flash by two 0xff
     }
+    memcpy(ErrNext, SaveErrNext, sizeof(jmp_buf));                  // restore old jump buffer
 }
 void  ClearStack(void) {
     NextData = 0;
@@ -2723,10 +2804,11 @@ extern "C" void ClearRuntime(void) {
     main_turtle_polyX = NULL;
     main_turtle_polyY = NULL;
     lasttimer = -1;
-    udpopen = 0;
+    telnetopen = 0;
     tcpopen = 0;
     optionangle = 1.0;
     optiony = 0;
+    OptionEscape = false;
     ConsoleRepeat = 0;
     clearrepeat();
     ClearStack();
