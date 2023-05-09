@@ -328,7 +328,7 @@ bool MMBasic::OnUserDestroy()
 }
 DWORD WINAPI Screen(LPVOID lpParameter)
 {
-	if(demo->Construct(HRes, VRes, PixelSize, PixelSize, FullScreen, false, false))
+	if(demo->Construct(HRes, VRes, PixelSize, PixelSize, FullScreen, false, true))
 //	if (demo->Construct(HRes, VRes, PixelSize, PixelSize))
 		demo->Start();
 	return 0;

@@ -123,7 +123,7 @@ int CMM1 = 0;
 const int64_t colourmap[16] = { M_BLACK,M_BLUE,M_GREEN,M_CYAN,M_RED,M_MAGENTA,M_YELLOW,M_WHITE,M_MYRTLE,M_COBALT,M_MIDGREEN,M_CERULEAN,M_RUST,M_FUCHSIA,M_BROWN,M_LILAC };
 const int xres[MAXMODES + 1] =         { 0,800,640,320,480,240,256,320,640,1024,848,1280,960,400,960,1280,1920,384,1024, 1920, 480};
 const int yres[MAXMODES + 1] =         { 0,600,400,200,432,216,240,240,480,768,480,720,540,300,540,1024,1080,240,600, 1000, 320};
-const int pixeldensity[MAXMODES + 1] = { 0,  1,  1,  3,  2,  4,  4,  3,  1,  1,  1,  1,  1,  2,  2,  1 ,   1,  3,  1, 1, 2};
+const int pixeldensity[MAXMODES + 1] = { 0,  1,  2,  3,  2,  4,  4,  3,  2,  1,  1,  1,  1,  2,  2,  1 ,   1,  3,  1, 1, 2};
 const int defaultfont[MAXMODES + 1] = { 0,1,1,1,1,1,1,1,1,(2 << 4) | 1 ,1 ,(2 << 4) | 1 , (3 << 4) | 1 ,1,1,(2 << 4) | 1 ,(2 << 4) | 1 ,1,(3 << 4) | 1 ,(2 << 4) | 1 , (6<<4)|1};
  typedef struct {
     unsigned char red;
