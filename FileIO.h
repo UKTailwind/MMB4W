@@ -69,7 +69,6 @@ void fun_getip(void);
 { (unsigned char*)"Kill",		T_CMD,				0, cmd_kill },
 { (unsigned char*)"Edit",   T_CMD,              0, cmd_newedit },
 { (unsigned char*)"System",   T_CMD,              0, cmd_system },
-{ (unsigned char*)"TELNET",   T_CMD,              0, cmd_telnet },
 { (unsigned char*)"TCP",   T_CMD,              0, cmd_tcp },
 
 #endif
@@ -127,6 +126,9 @@ struct option_s {
     unsigned char F7key[MAXKEYLEN];
     unsigned char F8key[MAXKEYLEN];
     unsigned char F9key[MAXKEYLEN];
+    unsigned char F10key[MAXKEYLEN];
+    unsigned char F11key[MAXKEYLEN];
+    unsigned char F12key[MAXKEYLEN];
     unsigned char DefaultFont;
     unsigned char KeyboardConfig;
     bool fullscreen;

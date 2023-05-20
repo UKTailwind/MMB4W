@@ -157,14 +157,14 @@ extern "C" void MMgetline(int filenbr, char* p) {
             if(c == F2)  tp = (char*)"RUN";
             if(c == F3)  tp = (char*)"LIST";
             if(c == F4)  tp = (char*)"EDIT";
-            if(c == F10) tp = (char*)"AUTOSAVE";
-            if(c == F11) tp = (char*)"XMODEM RECEIVE";
-            if(c == F12) tp = (char*)"XMODEM SEND";
-            if(c == F5) tp = (char*)Option.F5key;
-            if(c == F6) tp = (char*)Option.F6key;
-            if(c == F7) tp = (char*)Option.F7key;
-            if(c == F8) tp = (char*)Option.F8key;
-            if(c == F9) tp = (char*)Option.F9key;
+            if(c == F5 && *Option.F5key) tp = (char*)Option.F5key;
+            if(c == F6 && *Option.F6key) tp = (char*)Option.F6key;
+            if(c == F7 && *Option.F7key) tp = (char*)Option.F7key;
+            if(c == F8 && *Option.F8key) tp = (char*)Option.F8key;
+            if(c == F9 && *Option.F9key) tp = (char*)Option.F9key;
+            if (c == F10 && *Option.F10key) tp = (char*)Option.F10key;
+            if (c == F11 && *Option.F11key) tp = (char*)Option.F11key;
+            if (c == F12 && *Option.F12key) tp = (char*)Option.F12key;
             if(tp) {
                 strcpy(p, tp);
                 if(EchoOption) { MMPrintString(tp); MMPrintString((char*)"\r\n"); }
@@ -360,13 +360,13 @@ void EditInputLine(void) {
                 if(*Option.F9key)strcpy(&buf[1], (char*)Option.F9key);
                 break;
             case (char)0x9a:
-                strcpy(&buf[1], (char*)"AUTOSAVE\r\n");
+                if (*Option.F10key)strcpy(&buf[1], (char*)Option.F10key);
                 break;
             case (char)0x9b:
-                strcpy(&buf[1], (char*)"XMODEM RECEIVE\r\n");
+                if (*Option.F11key)strcpy(&buf[1], (char*)Option.F11key);
                 break;
             case (char)0x9c:
-                strcpy(&buf[1], (char*)"XMODEM SEND\r\n");
+                if (*Option.F12key)strcpy(&buf[1], (char*)Option.F12key);
                 break;
             case CTRLKEY('E'):
             case (char)UP:    if(!(BufEdited /*|| autoOn || CurrentLineNbr */)) {

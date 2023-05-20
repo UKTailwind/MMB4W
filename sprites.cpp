@@ -801,7 +801,7 @@ void cmd_blit(void) {
     unsigned char* p;
     uint32_t *q;
     if ((p = checkstring(cmdline, (unsigned char *)"SHOW SAFE"))) {
-        int layer;
+        int layer, mode = 1;
         getargs(&p, 11, (unsigned char*)",");
         if (!(argc == 7 || argc == 9 || argc == 11)) error((char *)"Syntax");
         if (hideall)error((char *)"Sprites are hidden");
@@ -811,10 +811,14 @@ void cmd_blit(void) {
             x1 = (int)getint(argv[2], -blitbuff[bnbr].w + 1, maxW - 1);
             y1 = (int)getint(argv[4], -blitbuff[bnbr].h + 1, maxH - 1);
             layer = (int)getint(argv[6], 0, MAXLAYER);
-            if (argc >= 9 && *argv[8])blitbuff[bnbr].rotation = (char)getint(argv[8], 0, 3);
+            if (argc >= 9 && *argv[8])blitbuff[bnbr].rotation = (char)getint(argv[8], 0, 7);
             else blitbuff[bnbr].rotation = 0;
+            if (blitbuff[bnbr].rotation > 3) {
+                mode |= 8;
+                blitbuff[bnbr].rotation &= 3;
+            }
             if (argc == 11 && *argv[10]) {
-                newb = (int)getint(argv[10], 0, 1);
+                newb = (int)getint(argv[10], 0, mode);
             }
             q = (uint32_t*)blitbuff[bnbr].blitbuffptr;
             w = blitbuff[bnbr].w;
@@ -827,7 +831,7 @@ void cmd_blit(void) {
                     if (blitbuff[bnbr].layer == 0) zeroLIFOadd(bnbr);
                     else LIFOadd(bnbr);
                     sprites_in_use++;
-                    BlitShowBuffer(bnbr, x1, y1, 1);
+                    BlitShowBuffer(bnbr, x1, y1, mode);
                 }
                 else {
                     showsafe(bnbr, x1, y1);
@@ -839,7 +843,7 @@ void cmd_blit(void) {
                 if (blitbuff[bnbr].layer == 0) zeroLIFOadd(bnbr);
                 else LIFOadd(bnbr);
                 sprites_in_use++;
-                BlitShowBuffer(bnbr, x1, y1, 1);
+                BlitShowBuffer(bnbr, x1, y1, mode);
             }
             ProcessCollisions(bnbr);
             if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
@@ -847,7 +851,7 @@ void cmd_blit(void) {
         else error((char *)"Buffer not in use");
     }
     else if ((p = checkstring(cmdline, (unsigned char*)"SHOW"))) {
-        int layer;
+        int layer, mode = 1;
         getargs(&p, 9, (unsigned char*)",");
         if (!(argc == 7 || argc == 9)) error((char *)"Syntax");
         if (hideall)error((char *)"Sprites are hidden");
@@ -857,8 +861,12 @@ void cmd_blit(void) {
             x1 = (int)getint(argv[2], -blitbuff[bnbr].w + 1, maxW - 1);
             y1 = (int)getint(argv[4], -blitbuff[bnbr].h + 1, maxH - 1);
             layer = (int)getint(argv[6], 0, MAXLAYER);
-            if (argc == 9)blitbuff[bnbr].rotation = (int)getint(argv[8], 0, 3);
+            if (argc == 9)blitbuff[bnbr].rotation = (int)getint(argv[8], 0, 7);
             else blitbuff[bnbr].rotation = 0;
+            if (blitbuff[bnbr].rotation > 3) {
+                mode |= 8;
+                blitbuff[bnbr].rotation &= 3;
+            }
             q = (uint32_t*)blitbuff[bnbr].blitbuffptr;
             w = blitbuff[bnbr].w;
             h = blitbuff[bnbr].h;
@@ -874,7 +882,7 @@ void cmd_blit(void) {
             else LIFOadd(bnbr);
             sprites_in_use++;
             int cursorhidden = 0;
-            BlitShowBuffer(bnbr, x1, y1, 1);
+            BlitShowBuffer(bnbr, x1, y1, mode);
             ProcessCollisions(bnbr);
             if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
         }
@@ -958,7 +966,9 @@ void cmd_blit(void) {
         //
     }
     else if ((p = checkstring(cmdline, (unsigned char*)"SWAP"))) {
-        int rbnbr=0;
+        int rbnbr = 0, mode = 2;
+        int64_t master;
+        signed char mymaster;
         getargs(&p, 5, (unsigned char*)",");
         if (argc < 3) error((char *)"Syntax");
         if (hideall)error((char *)"Sprites are hidden");
@@ -971,6 +981,8 @@ void cmd_blit(void) {
         if (blitbuff[rbnbr].active) error((char *)"New buffer already displayed");
         if (!(blitbuff[rbnbr].w == blitbuff[bnbr].w && blitbuff[rbnbr].h == blitbuff[bnbr].h)) error((char *)"Size mismatch");
         // copy the relevant data
+        master = blitbuff[rbnbr].master;
+        mymaster = blitbuff[rbnbr].mymaster;
         blitbuff[rbnbr].blitstoreptr = blitbuff[bnbr].blitstoreptr;
         blitbuff[rbnbr].x = blitbuff[bnbr].x;
         blitbuff[rbnbr].y = blitbuff[bnbr].y;
@@ -979,6 +991,8 @@ void cmd_blit(void) {
         if (blitbuff[rbnbr].layer == 0)zeroLIFOswap(bnbr, rbnbr);
         else LIFOswap(bnbr, rbnbr);
         // "Hide" the old sprite
+        blitbuff[bnbr].master = master;
+        blitbuff[bnbr].mymaster = mymaster;
         blitbuff[bnbr].x = 10000;
         blitbuff[bnbr].y = 10000;
         blitbuff[bnbr].layer = -1;
@@ -986,11 +1000,14 @@ void cmd_blit(void) {
         blitbuff[bnbr].next_y = 10000;
         blitbuff[bnbr].active = 0;
         blitbuff[bnbr].lastcollisions = 0;
-        if (argc == 5)blitbuff[rbnbr].rotation = (char)getint(argv[4], 0, 3);
+        if (argc == 5)blitbuff[rbnbr].rotation = (char)getint(argv[4], 0, 7);
         else blitbuff[rbnbr].rotation = 0;
-        BlitShowBuffer(rbnbr, blitbuff[rbnbr].x, blitbuff[rbnbr].y, 2);
+        if (blitbuff[rbnbr].rotation > 3) {
+            mode |= 8;
+            blitbuff[rbnbr].rotation &= 3;
+        }
+        BlitShowBuffer(rbnbr, blitbuff[rbnbr].x, blitbuff[rbnbr].y, mode);
         if (sprites_in_use != LIFOpointer + zeroLIFOpointer || sprites_in_use != sumlayer())error((char *)"sprite internal error");
-
     }
     else if ((p = checkstring(cmdline, (unsigned char*)"READ"))) {
         getargs(&p, 11, (unsigned char*)",");

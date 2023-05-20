@@ -586,14 +586,17 @@ void cmd_list(void) {
 			else if(m == CommandTableSize + 2)strcpy(c[m], "End If");
 			else if(m == CommandTableSize + 3)strcpy(c[m], "Exit Do");
 			else strcpy(c[m], "Cat");
-			if(strcasecmp(c[m],"CSub")!=0  && strcasecmp(c[m], "End CSub") != 0)m++;
+			m++;
 		}
 		sortStrings(c, m);
 		for (i = 1; i < m; i += step) {
 			for (k = 0; k < step; k++) {
 				if(i + k < m) {
-					MMPrintString(c[i + k]);
-					if(k != (step - 1))for (j = strlen(c[i + k]); j < 15; j++)MMputchar(' ');
+					if (strcasecmp(c[i + k], "CSub") != 0 && strcasecmp(c[i + k], "End CSub") != 0) {
+						MMPrintString(c[i + k]);
+						if (k != (step - 1))for (j = strlen(c[i + k]); j < 15; j++)MMputchar(' ');
+					}
+					else i--;
 				}
 			}
 			MMPrintString((char *)"\r\n");

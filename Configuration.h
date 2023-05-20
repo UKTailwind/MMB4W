@@ -24,7 +24,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 ************************************************************************************************************************/
 #pragma once
 #define RoundUptoPage(a)     ((((uint64_t)a) + (uint64_t)(256 - 1)) & (uint64_t)(~(256 - 1)))// round up to the nearest whole integer
-#define MagicKey 0x934248E6
+#define MagicKey 0x976428E6
 #define HEAP_MEMORY_SIZE	(65536*1024*2)
 #define MAX_PROG_SIZE		(1024*1024)
 #define CONSOLE_RX_BUF_SIZE MAX_PROG_SIZE

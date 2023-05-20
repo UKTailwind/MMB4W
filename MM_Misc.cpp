@@ -742,6 +742,36 @@ void printoptions(void) {
 
         PO2Str("F9", (char*)cc, 1);
     }
+    if (strlen((char*)Option.F10key)) {
+        char cc[MAXKEYLEN + 4];
+        strcpy(cc, (char*)Option.F10key);
+        if (cc[strlen(cc) - 2] == '\r' && cc[strlen(cc) - 2] == '\r') {
+            cc[strlen(cc) - 2] = 0;
+            strcat(cc, "<crlf>");
+        }
+
+        PO2Str("F10", (char*)cc, 1);
+    }
+    if (strlen((char*)Option.F11key)) {
+        char cc[MAXKEYLEN + 4];
+        strcpy(cc, (char*)Option.F11key);
+        if (cc[strlen(cc) - 2] == '\r' && cc[strlen(cc) - 2] == '\r') {
+            cc[strlen(cc) - 2] = 0;
+            strcat(cc, "<crlf>");
+        }
+
+        PO2Str("F11", (char*)cc, 1);
+    }
+    if (strlen((char*)Option.F12key)) {
+        char cc[MAXKEYLEN + 4];
+        strcpy(cc, (char*)Option.F12key);
+        if (cc[strlen(cc) - 2] == '\r' && cc[strlen(cc) - 2] == '\r') {
+            cc[strlen(cc) - 2] = 0;
+            strcat(cc, "<crlf>");
+        }
+
+        PO2Str("F12", (char*)cc, 1);
+    }
     char buff[30] = { 0 };
     sprintf(buff, "Current display %d,%d\r\n", OptionHeight, OptionWidth);
     MMPrintString(buff);
@@ -976,6 +1006,33 @@ void cmd_option(void) {
         SaveOptions();
         return;
     }
+    tp = checkstring(cmdline, (unsigned char*)"F10");
+    if (tp) {
+        char p[STRINGSIZE];
+        strcpy(p, (const char*)getCstring(tp));
+        if (strlen(p) >= sizeof(Option.F10key))error((char*)"Maximum % characters", MAXKEYLEN - 1);
+        else strcpy((char*)Option.F10key, p);
+        SaveOptions();
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"F11");
+    if (tp) {
+        char p[STRINGSIZE];
+        strcpy(p, (const char*)getCstring(tp));
+        if (strlen(p) >= sizeof(Option.F11key))error((char*)"Maximum % characters", MAXKEYLEN - 1);
+        else strcpy((char*)Option.F11key, p);
+        SaveOptions();
+        return;
+    }
+    tp = checkstring(cmdline, (unsigned char*)"F12");
+    if (tp) {
+        char p[STRINGSIZE];
+        strcpy(p, (const char*)getCstring(tp));
+        if (strlen(p) >= sizeof(Option.F12key))error((char*)"Maximum % characters", MAXKEYLEN - 1);
+        else strcpy((char*)Option.F12key, p);
+        SaveOptions();
+        return;
+    }
     tp = checkstring(cmdline, (unsigned char*)"AUTORUN");
     if (tp) {
         if (checkstring(tp, (unsigned char*)"OFF")) { Option.Autorun = 0; SaveOptions(); return; }
@@ -1199,17 +1256,17 @@ void fun_info(void) {
     }
     tp = checkstring(ep, (unsigned char *)"OPTION");
     if (tp) {
-        if (checkstring(tp, (unsigned char*)"ANGLE")) {
-            if (optionangle == 1.0)strcpy((char*)sret, "DEGREES");
-            else strcpy((char*)sret, "RADIANS");
+        if (checkstring(tp, (unsigned char*)"AUTORUN")) {
+            if (Option.Autorun == false)strcpy((char*)sret, "Off");
+            else strcpy((char*)sret, "On");
+        }
+        else if (checkstring(tp, (unsigned char*)"ANGLE")) {
+            if (optionangle == 1.0)strcpy((char*)sret, "RADIANS");
+            else strcpy((char*)sret, "DEGREES");
         }
         else if (checkstring(tp, (unsigned char*)"Y_AXIS")) {
             if (optiony == 1)strcpy((char*)sret, "UP");
             else strcpy((char*)sret, "DOWN");
-        }
-        if (checkstring(tp, (unsigned char *)"AUTORUN")) {
-            if (Option.Autorun == false)strcpy((char *)sret, "Off"); 
-            else strcpy((char *)sret, "On");
         }
         else if (checkstring(tp, (unsigned char *)"EXPLICIT")) {
             if (OptionExplicit == false)strcpy((char *)sret, "Off");
@@ -1229,6 +1286,16 @@ void fun_info(void) {
         }
         else if (checkstring(tp, (unsigned char *)"BREAK")) {
             iret = BreakKey;
+            targ = T_INT;
+            return;
+        }
+        else if (checkstring(tp, (unsigned char*)"HEIGHT")) {
+            iret = Option.Height;
+            targ = T_INT;
+            return;
+        }
+        else if (checkstring(tp, (unsigned char*)"WIDTH")) {
+            iret = Option.Width;
             targ = T_INT;
             return;
         }
