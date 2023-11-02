@@ -634,6 +634,7 @@ void loadpng(unsigned char* p) {
 }
 void hidesafe(int bnbr) {
     int found = 0;
+    int zerofound = 0;
     int i;
     for (i = LIFOpointer - 1; i >= 0; i--) {
         if (LIFO[i] == bnbr) {
@@ -647,7 +648,8 @@ void hidesafe(int bnbr) {
         for (i = zeroLIFOpointer - 1; i >= 0; i--) {
             if (zeroLIFO[i] == bnbr) {
                 blithide(zeroLIFO[i], 0);
-                found = -i;
+                found = i;
+                zerofound = 1;
                 break;
             }
             blithide(zeroLIFO[i], 0);
@@ -664,8 +666,7 @@ void hidesafe(int bnbr) {
     blitbuff[bnbr].next_y = 10000;
     blitbuff[bnbr].lastcollisions = 0;
     blitbuff[bnbr].edges = 0;
-    if (found < 0) {
-        found = -found;
+    if (zerofound) {
         for (i = found; i < zeroLIFOpointer; i++) {
             BlitShowBuffer(zeroLIFO[i], blitbuff[zeroLIFO[i]].x, blitbuff[zeroLIFO[i]].y, 0);
         }

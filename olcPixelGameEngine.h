@@ -2706,7 +2706,7 @@ namespace olc
 
 		if (structure == olc::DecalStructure::LIST)
 		{			
-			for (int tri = 0; tri < vPoints.size() / 3; tri++)
+			for (unsigned int tri = 0; tri < vPoints.size() / 3; tri++)
 			{
 				std::vector<olc::vf2d> vP = { vPoints[tri * 3 + 0], vPoints[tri * 3 + 1], vPoints[tri * 3 + 2] };
 				std::vector<olc::vf2d> vT = { vTex[tri * 3 + 0], vTex[tri * 3 + 1], vTex[tri * 3 + 2] };
@@ -2718,7 +2718,7 @@ namespace olc
 
 		if (structure == olc::DecalStructure::STRIP)
 		{
-			for (int tri = 2; tri < vPoints.size(); tri++)
+			for (unsigned int tri = 2; tri < vPoints.size(); tri++)
 			{
 				std::vector<olc::vf2d> vP = { vPoints[tri - 2], vPoints[tri-1], vPoints[tri] };
 				std::vector<olc::vf2d> vT = { vTex[tri - 2], vTex[tri - 1], vTex[tri] };
@@ -2730,7 +2730,7 @@ namespace olc
 
 		if (structure == olc::DecalStructure::FAN)
 		{
-			for (int tri = 2; tri < vPoints.size(); tri++)
+			for (unsigned int tri = 2; tri < vPoints.size(); tri++)
 			{
 				std::vector<olc::vf2d> vP = { vPoints[0], vPoints[tri - 1], vPoints[tri] };
 				std::vector<olc::vf2d> vT = { vTex[0], vTex[tri - 1], vTex[tri] };
@@ -3530,7 +3530,7 @@ namespace olc
 			if (vConsoleCursor.y >= vConsoleSize.y)
 			{
 				vConsoleCursor.y = vConsoleSize.y - 1;
-				for (size_t i = 1; i < vConsoleSize.y; i++)
+				for (size_t i = 1; i < (size_t)vConsoleSize.y; i++)
 					sConsoleLines[i - 1] = sConsoleLines[i];
 				sConsoleLines[vConsoleCursor.y].clear();
 			}
@@ -3608,7 +3608,7 @@ namespace olc
 			sTextEntryString.erase(nTextEntryCursor-1, 1);
 			nTextEntryCursor = std::max(0, nTextEntryCursor - 1);
 		}
-		if (GetKey(olc::Key::DEL).bPressed && nTextEntryCursor < sTextEntryString.size())
+		if (GetKey(olc::Key::DEL).bPressed && (unsigned int)nTextEntryCursor < sTextEntryString.size())
 			sTextEntryString.erase(nTextEntryCursor, 1);	
 
 		if (GetKey(olc::Key::UP).bPressed)

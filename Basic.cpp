@@ -143,6 +143,7 @@ extern "C" int kbhitConsole(void) {
 // filenbr == 0 means the console input
 extern "C" void MMgetline(int filenbr, char* p) {
     int c, nbrchars = 0;
+    int lastchar = 0;
     char* tp;
     while (1) {
         CheckAbort();												// jump right out if CTRL-C
@@ -191,6 +192,9 @@ extern "C" void MMgetline(int filenbr, char* p) {
         }
 
         if(c == '\n') {                                             // what to do with a newline
+            if (filenbr == 0 && EchoOption) {
+                MMPrintString((char*)"\r\n");
+            }
             break;                                              // a newline terminates a line (for a file)
         }
 
