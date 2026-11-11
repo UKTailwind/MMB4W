@@ -1,0 +1,11 @@
+/build/
+/dist/
+/emulator/
+/tests/input/build/
+/tests/shell/build/
+/tests/input/NativeLifo.inc
+/tests/input/NativeAudioWait.inc
+/tests/input/NativeInputPulses.inc
+*.log
+*.user
+.vs/

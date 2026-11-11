@@ -24,6 +24,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 ************************************************************************************************************************/
 #include "olcPixelGameEngine.h"
 #include "MainThread.h"
+#include "DesktopShell.h"
 #include "MMBasic_Includes.h"
 #include <stdlib.h>									// standard library functions
 #include <stdio.h>
@@ -575,6 +576,9 @@ int FileLoadProgram(unsigned char* fn, int mode) {
     }
 
     if (!BasicFileOpen(buff, fnbr, (char*)"rb")) return false;
+    DesktopSetProgram(buff);
+    // BASIC programs use relative assets beside the loaded source file.
+    if (*path) SetCurrentDirectoryA(path);
     strcpy(lastfileedited, buff);
     strcpy(Option.lastfilename, buff);
     SaveOptions();
@@ -733,9 +737,11 @@ void LoadImage(unsigned char* p) {
     if (!BasicFileOpen(fname, fnbr, (char*)"rb")) return;
     int savey = optiony;
     optiony = 0;
-    BMP_bDecode(xOrigin, yOrigin, fnbr);
+    const uint8_t decodeStatus = BMP_bDecode(xOrigin, yOrigin, fnbr);
     optiony = savey;
     FileClose(fnbr);
+    if (decodeStatus == 1) error((char*)"Invalid or unsupported BMP");
+    if (decodeStatus != 0) error((char*)"Windows could not decode BMP");
 }
 
 unsigned char pjpeg_need_bytes_callback(unsigned char* pBuf, unsigned char buf_size, unsigned char* pBytes_actually_read, void* pCallback_data)
@@ -1360,46 +1366,46 @@ void cmd_chdir(void) {
 
 
 }
+// Keep the portable interpreter's settings beside its runtime, never in Documents.
+static void PortableOptionsPath(char* path, size_t capacity) {
+    DWORD length = GetModuleFileNameA(NULL, path, (DWORD)capacity);
+    if (!length || length >= capacity) {
+        strcpy_s(path, capacity, ".options");
+        return;
+    }
+    char* slash = strrchr(path, '\\');
+    if (slash) slash[1] = 0;
+    else path[0] = 0;
+    strcat_s(path, capacity, ".options");
+}
 extern "C" void SaveOptions(void) {
-    FILE* fp;
-    char buf[sizeof(struct option_s)];
-    CHAR my_documents[MAX_PATH];
-    HRESULT result = SHGetFolderPathA(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, my_documents);
-    strcat(my_documents, "\\.options");
-    fp = fopen(my_documents, "w");
-    memcpy(buf, &Option, sizeof(struct option_s));                  // insert our new data into the RAM copy
-    fwrite(buf, 1, sizeof(struct option_s), fp);
-    fclose(fp);
+    char path[MAX_PATH + 32] = {0};
+    PortableOptionsPath(path, sizeof(path));
+    FILE* fp = fopen(path, "wb");
+    if (fp) {
+        fwrite(&Option, 1, sizeof(struct option_s), fp);
+        fclose(fp);
+    }
 }
 
-
 extern "C" void LoadOptions(void) {
-    FILE* fp;
-    char buf[sizeof(struct option_s)];
-    CHAR my_documents[MAX_PATH];
-    HRESULT result = SHGetFolderPathA(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, my_documents);
-    strcat(my_documents, "\\.options");
-    if ((fp = fopen(my_documents, "r")) != NULL) {
-        fread(buf, 1, 4, fp);
-        uint32_t* p = (uint32_t*)buf;
-        if (*p != MagicKey) { //options have changed so reset everything
-            fclose(fp);
-            ResetOptions();
-            fp = fopen(my_documents, "w");
-            memcpy(buf, &Option, sizeof(struct option_s));                  // insert our new data into the RAM copy
-            fwrite(buf, 1, sizeof(struct option_s), fp);
-        }  else {
-            fread(&buf[4], 1, sizeof(struct option_s) - 4, fp);
-            memcpy(&Option, buf, sizeof(struct option_s));
-        }
+    char path[MAX_PATH + 32] = {0};
+    char buf[sizeof(struct option_s)] = {0};
+    PortableOptionsPath(path, sizeof(path));
+    FILE* fp = fopen(path, "rb");
+    size_t size = 0;
+    if (fp) {
+        size = fread(buf, 1, sizeof(buf), fp);
+        fclose(fp);
     }
-    else {
+    uint32_t key = 0;
+    memcpy(&key, buf, sizeof(key));
+    if (size == sizeof(buf) && key == MagicKey) {
+        memcpy(&Option, buf, sizeof(Option));
+    } else {
         ResetOptions();
-        fp = fopen(my_documents, "w");
-        memcpy(buf, &Option, sizeof(struct option_s));                  // insert our new data into the RAM copy
-        fwrite(buf, 1, sizeof(struct option_s), fp);
+        SaveOptions();
     }
-    fclose(fp);
 }
 
 void cmd_save(void) {

@@ -24,6 +24,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 ************************************************************************************************************************/
 #include "olcPixelGameEngine.h"
 #include "MainThread.h"
+#include "DesktopShell.h"
 #include "MMBasic_Includes.h"
 #include "hxcmod.h"
 #define DRWAV_COPY_MEMORY(dst, src, sz) memcpy((dst), (src), (sz))
@@ -44,6 +45,21 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "dr_mp3.h"
 int PWM_FREQ = 44100;
 #define MAXALBUM 100
+
+// The interpreter waits for the desktop thread to rebuild the sound device.
+// A concurrent window close must win over a new restart request, and must
+// release this wait so the main thread can join the interpreter at shutdown.
+static bool RestartAudioDevice() {
+    if (DesktopQuitRequested()) return false;
+    if (InterlockedCompareExchange(reinterpret_cast<volatile LONG*>(&SystemMode),
+            MODE_SAMPLERATE, MODE_RUN) != MODE_RUN) return false;
+    while (SystemMode != MODE_RUN) {
+        if (SystemMode == MODE_QUIT || SystemMode == MODE_STOPTHREADS || DesktopQuitRequested())
+            return false;
+        Sleep(1);
+    }
+    return !DesktopQuitRequested();
+}
 
 unsigned char* WAVInterrupt = NULL;
 volatile int WAVcomplete;
@@ -1089,8 +1105,7 @@ void wavcallback(char* p) {
 	if (SampleRate != mywav.sampleRate || NChannels != mywav.channels) {
 		SampleRate = mywav.sampleRate;
 		NChannels = mywav.channels;
-		SystemMode = MODE_SAMPLERATE;
-		while (SystemMode != MODE_RUN) {}
+		if (!RestartAudioDevice()) return;
 	}
     bcount[1] = drwav_read_pcm_frames_f32(&mywav, WAV_BUFFER_SIZE / 2, (float*)sbuff1) * mywav.channels;
 //	PInt(bcount[1]);
@@ -1125,8 +1140,7 @@ void mp3callback(char* p) {
 	if (SampleRate != mymp3.sampleRate || NChannels != 2) {
 		SampleRate = mymp3.sampleRate;
 		NChannels = 2;
-		SystemMode = MODE_SAMPLERATE;
-		while (SystemMode != MODE_RUN) {}
+		if (!RestartAudioDevice()) return;
 	}
 	bcount[1] = drmp3_read_pcm_frames_f32(&mymp3, WAV_BUFFER_SIZE / 2, (float*)sbuff1) * mymp3.channels;
 
@@ -1168,8 +1182,7 @@ void flaccallback(char* p) {
 	if (SampleRate != myflac->sampleRate || NChannels != 2) {
 		SampleRate = myflac->sampleRate;
 		NChannels = 2;
-		SystemMode = MODE_SAMPLERATE;
-		while (SystemMode != MODE_RUN) {}
+		if (!RestartAudioDevice()) return;
 	}
 	bcount[1] = drflac_read_pcm_frames_f32(myflac, WAV_BUFFER_SIZE / 2, (float*)sbuff1) * myflac->channels;
     wav_filesize = (int)bcount[1];
@@ -1199,8 +1212,7 @@ extern "C" void beep(int duration, float freq) {
 	if (SampleRate != 44100 || NChannels != 2) {
 		SampleRate = 44100;
 		NChannels = 2;
-		SystemMode = MODE_SAMPLERATE;
-		while (SystemMode != MODE_RUN) {}
+		if (!RestartAudioDevice()) return;
 	}
 	CurrentlyPlaying = P_TONE;
 }
@@ -1326,8 +1338,7 @@ void cmd_play(void) {
 		if (SampleRate != 44100 || NChannels != 2) {
 			SampleRate = 44100;
 			NChannels = 2;
-			SystemMode = MODE_SAMPLERATE;
-			while (SystemMode != MODE_RUN) {}
+			if (!RestartAudioDevice()) return;
 		}
 		SoundPlay = PlayDuration;
 		CurrentlyPlaying = P_TONE;
@@ -1381,8 +1392,7 @@ void cmd_play(void) {
 		if (SampleRate != modfilesamplerate || NChannels != 2) {
 			SampleRate = modfilesamplerate;
 			NChannels = 2;
-			SystemMode = MODE_SAMPLERATE;
-			while (SystemMode != MODE_RUN) {}
+			if (!RestartAudioDevice()) return;
 		}
         swingbuf = 1;
         nextbuf = 2;
@@ -1702,8 +1712,7 @@ void cmd_play(void) {
 		if (SampleRate != 44100 || NChannels != 2) {
 			SampleRate = 44100;
 			NChannels = 2;
-			SystemMode = MODE_SAMPLERATE;
-			while (SystemMode != MODE_RUN) {}
+			if (!RestartAudioDevice()) return;
 		}
 		CurrentlyPlaying = P_SOUND;
 		return;

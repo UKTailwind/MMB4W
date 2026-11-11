@@ -2593,7 +2593,7 @@ void fun_mouse(void) {
     }
     else if (toupper(*p) == 'W') {
         int scale=1;
-        if (argc == 3)scale= (int)getint(argv[2], 0, 100);
+        if (argc == 3)scale= (int)getint(argv[2], 1, 100);
         iret = mouse_wheel/scale;
         mouse_wheel = 0;
     }

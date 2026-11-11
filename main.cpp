@@ -28,7 +28,10 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "FileIO.h"
 #include "Draw.h"
 #include "audio.h"
+#include "DesktopShell.h"
+#include "DesktopInput.h"
 #include <chrono>
+#include <mutex>
 extern "C" void ResetOptions(void);
 unsigned volatile char ConsoleRxBuf[CONSOLE_RX_BUF_SIZE] = { 0 };
 volatile int ConsoleRxBufHead = 0;
@@ -53,6 +56,7 @@ int ARGBenabled = 0;
 // Next layer
 int MMAbort = false;
 int noaudio = 0;
+std::mutex audioDeviceMutex;
 volatile int HRes, VRes, PixelSize, PlayBeep;
 volatile int SystemMode = MODE_RUN;
 MMBasic* demo;
@@ -255,13 +259,20 @@ bool MMBasic::OnUserUpdate(float fElapsedTime)
 {
 	auto when_started = clock_type::now();
 	auto target_time = when_started + 10ms;
+	if (DesktopQuitRequested()) SystemMode = MODE_QUIT;
+	if (SystemMode == MODE_QUIT || SystemMode == MODE_RESIZE || SystemMode == MODE_STOPTHREADS) { DisplayActive = 0; return false; }
+	int requestedScale; bool requestedFullscreen;
+	if (DesktopConsumeDisplayRequest(requestedScale, requestedFullscreen))
+		PostMessageW(DesktopWindowHandle(), WM_APP + 413, requestedScale, requestedFullscreen);
 	CheckKeyBoard();
+	DesktopUpdateMouseCapture(DesktopWindowHandle(), IsFocused());
+	const int screenWidth = ScreenWidth(), screenHeight = ScreenHeight();
 	if (doupdate) {
 		SetPixelMode(olc::Pixel::NORMAL);
 		SetDrawTarget(PAGE0);
-		for (int y = 0; y < VRes; y++) {
-			for (int x = 0; x < HRes; x++) {
-				Draw(x, y, PageWrite0[y * HRes + x]);
+		for (int y = 0; y < screenHeight; y++) {
+			for (int x = 0; x < screenWidth; x++) {
+				Draw(x, y, PageWrite0[y * screenWidth + x]);
 			}
 		}
 		doupdate--;
@@ -269,11 +280,27 @@ bool MMBasic::OnUserUpdate(float fElapsedTime)
 	if(ARGBenabled){
 		SetPixelMode(olc::Pixel::NORMAL);
 		SetDrawTarget(PAGE1);
-		for (int y = 0; y < VRes; y++) {
-			for (int x = 0; x < HRes; x++) {
-				Draw(x, y, PageWrite1[y * HRes + x]);
+		for (int y = 0; y < screenHeight; y++) {
+			for (int x = 0; x < screenWidth; x++) {
+				Draw(x, y, PageWrite1[y * screenWidth + x]);
 			}
 		}
+	}
+	if (DesktopConsumeScreenshot()) {
+		SetDrawTarget(PAGE0);
+		std::vector<uint32_t> capture(screenWidth * screenHeight);
+		const olc::Pixel* base = GetDrawTarget()->GetData();
+		for (int i = 0; i < screenWidth * screenHeight; ++i) capture[i] = base[i].n;
+		if (ARGBenabled) {
+			SetDrawTarget(PAGE1);
+			const olc::Pixel* top = GetDrawTarget()->GetData();
+			for (int i = 0; i < screenWidth * screenHeight; ++i) {
+				olc::Pixel b(capture[i]), t(top[i]);
+				const unsigned a = t.a;
+				capture[i] = olc::Pixel((t.r*a+b.r*(255-a))/255, (t.g*a+b.g*(255-a))/255, (t.b*a+b.b*(255-a))/255).n;
+			}
+		}
+		DesktopSaveScreenshot(capture.data(), screenWidth, screenHeight);
 	}
 	std::this_thread::sleep_until(target_time);
 	if (SystemMode == MODE_QUIT || SystemMode == MODE_RESIZE) {
@@ -288,7 +315,7 @@ bool MMBasic::OnUserUpdate(float fElapsedTime)
 MMBasic::MMBasic()
 {
 	// Name your application
-	sAppName = "MMBasic V5.07.03";
+	sAppName = "MMB4W Emulator";
 }
 bool MMBasic::OnUserCreate()
 {
@@ -313,17 +340,23 @@ bool MMBasic::OnUserCreate()
 	int bufferneeded = RoundUptoPage(SampleRate * NChannels /96) ;
 	using namespace std::placeholders;
 	if (!noaudio) {
+		std::lock_guard<std::mutex> lock(audioDeviceMutex);
 		olc::SOUND::InitialiseAudio(SampleRate, NChannels, 8, bufferneeded);
-		olc::SOUND::SetUserSynthFunction(std::bind(&MMBasic::MyCustomSynthFunction, demo, _1, _2, _3));
+		olc::SOUND::SetUserSynthFunction([this](int channel, float time, float step) {
+			return DesktopIsPaused() ? 0.0f : MyCustomSynthFunction(channel, time, step) * DesktopVolume();
+		});
 	}
 	return true;
 }
 bool MMBasic::OnUserDestroy()
 {
 	using namespace std;
-	memset((char*)FrameBuffer, 0, FRAMEBUFFERSIZE);
+	DesktopInputClearHeld();
+	memset((char*)FrameBuffer, 0, sizeof(FrameBuffer));
 	CurrentX = CurrentY = 0;
-	if (!noaudio)olc::SOUND::DestroyAudio();
+	if (!noaudio) { std::lock_guard<std::mutex> lock(audioDeviceMutex); olc::SOUND::DestroyAudio(); }
+	// Closing the graphics window must also stop the interpreter process.
+	if (SystemMode != MODE_RESIZE) SystemMode = MODE_QUIT;
 	return true;
 }
 DWORD WINAPI Screen(LPVOID lpParameter)
@@ -331,10 +364,15 @@ DWORD WINAPI Screen(LPVOID lpParameter)
 	if(demo->Construct(HRes, VRes, PixelSize, PixelSize, FullScreen, false, true))
 //	if (demo->Construct(HRes, VRes, PixelSize, PixelSize))
 		demo->Start();
+	if (SystemMode != MODE_RESIZE && SystemMode != MODE_STOPTHREADS) SystemMode = MODE_QUIT;
 	return 0;
 }
+extern "C" void TraceRuntimeStartup(const char* message);
 int main(int argc, char* argv[]) {
-	DWORD threadexit;
+    SetProcessDPIAware();
+    DesktopInitialize();
+    TraceRuntimeStartup("MAIN: arguments received");
+    for (int i = 0; i < argc; ++i) TraceRuntimeStartup(argv[i]);
 	demo = new MMBasic;
 	unsigned int myCounter = 0;
 	DWORD TimerID;
@@ -346,7 +384,8 @@ int main(int argc, char* argv[]) {
 	HANDLE myTHandle = CreateThread(0, 0, mClock, NULL, 0, &TimerID);
 	while (mSecTimer < 200) {}
 	DWORD BasicID;
-	HANDLE myHandle=CreateThread(0, 0, Basic, (noaudio==1? argv[2]:argv[1]), 0, &BasicID);
+	const char* startupProgram = noaudio ? (argc > 2 ? argv[2] : nullptr) : (argc > 1 ? argv[1] : nullptr);
+	HANDLE myHandle=CreateThread(0, 0, Basic, (LPVOID)startupProgram, 0, &BasicID);
 	while (mSecTimer < 400) {}
 	DWORD ScreenID;
 	HANDLE mySHandle = CreateThread(0, 0, Screen, NULL, 0, &ScreenID);
@@ -359,40 +398,41 @@ int main(int argc, char* argv[]) {
 		case MODE_RUN:
 			break;
 		case MODE_QUIT:
-//			demo->olc_Terminate();
-			uSec(100000);
-			delete demo;
+			WaitForSingleObject(mySHandle, INFINITE);
 			SystemMode = MODE_STOPTHREADS;
-			while (GetExitCodeThread(myHandle,&threadexit)==STILL_ACTIVE){}
-			while (GetExitCodeThread(myTHandle, &threadexit) == STILL_ACTIVE) {}
-			while (GetExitCodeThread(mySHandle, &threadexit) == STILL_ACTIVE) {}
-			return 0;
-			break;
-		case MODE_RESIZE:
-//			demo->olc_Terminate();
-			uSec(100000);
+			WaitForSingleObject(myHandle, INFINITE);
+			WaitForSingleObject(myTHandle, INFINITE);
 			delete demo;
-			if(mySHandle)CloseHandle(mySHandle);
+			CloseHandle(myHandle); CloseHandle(myTHandle); CloseHandle(mySHandle);
+			return 0;
+		case MODE_RESIZE:
+			WaitForSingleObject(mySHandle, INFINITE);
+			delete demo;
+			CloseHandle(mySHandle);
 			demo = new MMBasic;
-			mySHandle = CreateThread(0, 0, Screen, &myCounter, 0, &ScreenID);
 			KEYLIFOpointer = 0;
 			SystemMode = MODE_RUN;
+			mySHandle = CreateThread(0, 0, Screen, &myCounter, 0, &ScreenID);
 			break;
 		case MODE_SOFTRESET:
-			while (GetExitCodeThread(myHandle, &threadexit) == STILL_ACTIVE) {}
-			uSec(100000);
+			WaitForSingleObject(myHandle, INFINITE);
 			CloseHandle(myHandle);
 			SystemMode = MODE_RUN;
-			uSec(100000);
 			KEYLIFOpointer = 0;
 			myHandle = CreateThread(0, 0, Basic, NULL, 0, &BasicID);
 			break;
-		case MODE_SAMPLERATE:
-			if (!noaudio)olc::SOUND::DestroyAudio();
-			int bufferneeded = RoundUptoPage(SampleRate * NChannels / 96);
-			if (!noaudio)olc::SOUND::InitialiseAudio(SampleRate, NChannels, 8, bufferneeded);
-			SystemMode = MODE_RUN;
+		case MODE_SAMPLERATE: {
+			std::lock_guard<std::mutex> lock(audioDeviceMutex);
+			if (!noaudio) {
+				olc::SOUND::DestroyAudio();
+				if (SystemMode == MODE_SAMPLERATE) {
+					int bufferneeded = RoundUptoPage(SampleRate * NChannels / 96);
+					olc::SOUND::InitialiseAudio(SampleRate, NChannels, 8, bufferneeded);
+				}
+			}
+			InterlockedCompareExchange(reinterpret_cast<volatile LONG*>(&SystemMode), MODE_RUN, MODE_SAMPLERATE);
 			break;
+		}
 		}
 	}
 	return 0;

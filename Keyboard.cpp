@@ -28,6 +28,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "Commands.h"
 #include "MM_Misc.h"
 #include "Serial.h"
+#include "DesktopInput.h"
+#include "DesktopShell.h"
 using namespace olc;
 const unsigned char asciiUK[256] = {
 	0,
@@ -183,8 +185,9 @@ extern "C" void LIFOadd(int n) {
 			j++;
 		}
 	}
-	KEYLIFO[j] = n;
-	KEYLIFOpointer = j + 1;
+	// KEYDOWN exposes at most eight keys; never overflow its ten-byte backing array.
+	if (j < 10) KEYLIFO[j++] = static_cast<unsigned char>(n);
+	KEYLIFOpointer = j;
 	keytimer=0; //New character added so start the key repeat timer
 }
 extern "C" void LIFOremove(int n) {
@@ -199,18 +202,24 @@ extern "C" void LIFOremove(int n) {
 	KEYLIFOpointer = j;
 }
 extern "C" void clearrepeat(void) {
+	DesktopInputClearHeld();
 	for(int i=0;i<10;i++)KEYLIFO[i] = 0;
 	KEYLIFOpointer = 0;
 	repeattime = Option.RepeatStart;
 }
 
 extern "C" void processkey(int i, int mode) {
+	if (mode == 0) {
+		DesktopInputKeyboardRelease(i);
+		repeattime = Option.RepeatStart;
+		return;
+	}
 	unsigned char* ascii = (unsigned char*)asciiUK;
 	if(Option.KeyboardConfig==CONFIG_US)ascii = (unsigned char*)asciiUS;
 	if(Option.KeyboardConfig == CONFIG_DE)ascii = (unsigned char*)asciiDE;
 	if (Option.KeyboardConfig == CONFIG_FR)ascii = (unsigned char*)asciiFR;
 	if (Option.KeyboardConfig == CONFIG_SW)ascii = (unsigned char*)asciiSW;
-	unsigned char c;
+	unsigned char c = 0;
 	if (i == 0xE2) {
 		if (Option.KeyboardConfig == CONFIG_DE || Option.KeyboardConfig == CONFIG_SW) {
 			if (GetKeyState(VK_RMENU) & 0x8000)c = '|';
@@ -284,7 +293,7 @@ extern "C" void processkey(int i, int mode) {
 			else if (i == 0x38)c = 126;   // [
 		}
 	} else if(mode!=-1) {
-		if (i == olc::Key::X && shift && ctrl)SystemMode = MODE_QUIT;
+		if (i == olc::Key::X && shift && ctrl) { SystemMode = MODE_QUIT; return; }
 		else if (ctrl && i >= olc::Key::A && i <= olc::Key::Z) c = i;
 		else if (shift && !shiftlock) c = ascii[i + 128];
 		else if (shift && shiftlock && !(i >= olc::Key::A && i <= olc::Key::Z)) c = ascii[i + 128];
@@ -296,9 +305,10 @@ extern "C" void processkey(int i, int mode) {
 	}
 	else */ {
 		if (mode == 1) {
+			c = static_cast<unsigned char>(DesktopInputKeyboardPress(i, c));
+			if (!c) return;
 			repeattime = Option.RepeatStart;
 			ConsoleRxBuf[ConsoleRxBufHead] = c;
-			LIFOadd(c);
 			if (BreakKey && ConsoleRxBuf[ConsoleRxBufHead] == BreakKey) {// if the user wants to stop the progran
 				MMAbort = true;                                        // set the flag for the interpreter to see
 				ConsoleRxBufHead = ConsoleRxBufTail;                    // empty the buffer
@@ -312,10 +322,6 @@ extern "C" void processkey(int i, int mode) {
 					ConsoleRxBufTail = (ConsoleRxBufTail + 1) % CONSOLE_RX_BUF_SIZE; // throw away the oldest char
 				}
 			}
-		}
-		else if (mode == 0) {
-			repeattime = Option.RepeatStart;
-			LIFOremove(c);
 		}
 		else {
 			if (keytimer > repeattime && KEYLIFOpointer) {
@@ -334,7 +340,11 @@ extern "C" void processkey(int i, int mode) {
 	}
 }
 void MMBasic::CheckKeyBoard(void) {
+	DesktopInputProcess(*this);
+	if (IsFocused() && !DesktopIsPaused()) {
 	int state = 0;
+	shift = GetKey(olc::Key::SHIFT).bHeld;
+	ctrl = GetKey(olc::Key::CTRL).bHeld;
 	shiftlock = (GetKeyState(VK_CAPITAL) & 0x0001);
 	numlock = (GetKeyState(VK_NUMLOCK) & 0x0001);
 	scrolllock = (GetKeyState(VK_SCROLL) & 0x0001);
@@ -354,47 +364,37 @@ void MMBasic::CheckKeyBoard(void) {
 		KE2 = 0;
 	}
 	for (uint32_t i = 1; i < olc::Key::ENUM_END; i++) {
-		int j=GetKeyState(i) & 0x8000;
-		if (GetKey((olc::Key)i).bReleased) {
-			if (i == olc::Key::SHIFT) {
-				clearrepeat();
-				state = 1;
-				shift = 0;
-				continue;
-			}
-			if (i == olc::Key::CTRL) {
-				clearrepeat();
-				state = 1;
-				ctrl = 0;
-				continue;
-			}
-			processkey(i, 0);
-			state = 1;
+		const auto key = GetKey((olc::Key)i);
+		const bool pressed = DesktopInputConsumeKeyPress(i) || key.bPressed;
+		// Emulator shortcuts belong to the shell even when their modifier
+		// was pressed after the letter was already held.
+		const bool reserved = i == olc::Key::F1 || i == olc::Key::F9 || i == olc::Key::F10 ||
+			i == olc::Key::F11 || i == olc::Key::F12 ||
+			((i == olc::Key::ENTER || i == olc::Key::RETURN) && (GetKeyState(VK_MENU) & 0x8000)) ||
+			(ctrl && (i == olc::Key::O || i == olc::Key::R || i == olc::Key::M));
+		if (reserved) {
+			DesktopInputKeyboardRelease(i);
+			continue;
 		}
-		if(GetKey((olc::Key)i).bPressed) {
-			if (i == olc::Key::SHIFT) {
-				clearrepeat();
-				state = 1;
-				shift = 1;
-				continue;
-			} 
-			if (i == olc::Key::CTRL) {
-				clearrepeat();
-				state = 1;
-				ctrl = 1;
-				continue;
-			}
+		if (pressed) {
 			state = 1;
-			processkey(i,1);
+			if (i == olc::Key::SHIFT) shift = 1;
+			else if (i == olc::Key::CTRL) ctrl = 1;
+			else processkey(i, 1);
+		}
+		// A raw DOWN/UP pair may arrive between graphics frames. Press it
+		// first, then defer release so the BASIC game can observe the tap.
+		if (!key.bHeld && (key.bReleased || pressed)) {
+			state = 1;
+			if (i == olc::Key::SHIFT) shift = 0;
+			else if (i == olc::Key::CTRL) ctrl = 0;
+			else processkey(i, 0);
 		}
 	}
 	if (state == 0)processkey(0, -1);
-	mouse_xpos = GetMouseX();
-	mouse_ypos = GetMouseY();
-	mouse_wheel += GetMouseWheel();
-	mouse_left = GetMouse(olc::Mouse::LEFT).bHeld;
-	mouse_right = GetMouse(olc::Mouse::RIGHT).bHeld;
-	mouse_middle = GetMouse(olc::Mouse::MIDDLE).bHeld;
+	} else {
+		ctrl = shift = modifiers = KE2 = 0;
+	}
 	if (comused) {
 		DWORD dNoOfBytesWritten = 0;
 		unsigned char c;
