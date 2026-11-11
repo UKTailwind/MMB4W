@@ -3239,9 +3239,10 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                 }
             }
         }
+        if (WritePage == 0) doupdate++;
     }
     void PageCopy(uint32_t fadd, uint32_t tadd, int transparent) {
-        uint8_t writesave = WritePage, readsave = ReadPage;
+        int writesave = WritePage, readsave = ReadPage;
         ;
         WritePage = tadd;
         ReadPage = fadd;
@@ -3252,9 +3253,10 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             memcpy(d, s, n);
         } else {
             MoveBufferNormal(0, 0, 0, 0, PageTable[fadd].xmax, PageTable[fadd].ymax, 4);
-            WritePage = writesave;
-            ReadPage = readsave;
         }
+        WritePage = writesave;
+        ReadPage = readsave;
+        if (tadd == 0) doupdate++;
     }
 
     void cmd_page(void) {
@@ -3442,7 +3444,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
         if (p) {
             int tempwrite;
             getargs(&p, 7, (unsigned char*)",");
-            uint8_t oldwrite = WritePage;
+            int oldwrite = WritePage;
             if (PageTable[WPN].address == NULL)error((char *)"World not created");
             int32_t fadd = (int)getint(argv[4], 0, MAXPAGES);
             tempwrite = fadd;
@@ -3486,8 +3488,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                 PageTable[BPN].ymax = PageTable[WPN].ymax;
                 PageTable[BPN].size = PageTable[WPN].size;
             }
-            int n = (PageTable[WPN].xmax * PageTable[WPN].ymax * sizeof(uint32_t)) >> 2;
-            memcpy((uint32_t*)PageTable[WPN].address, (uint32_t*)PageTable[BPN].address, n);
+            size_t n = PageTable[WPN].xmax * PageTable[WPN].ymax * sizeof(uint32_t);
+            memcpy((void*)PageTable[BPN].address, (const void*)PageTable[WPN].address, n);
             return;
         }
         p = checkstring(cmdline, (unsigned char*)"RESTORE");
@@ -3496,7 +3498,7 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
             if (PageTable[WPN].address == NULL)error((char *)"Framebuffer not created");
             if (PageTable[BPN].address == NULL)error((char *)"Framebuffer backup not created");
             if (argc) {
-                uint8_t oldwrite = WritePage;
+                int oldwrite = WritePage;
                 int w = (int)getint(argv[4], 1, PageTable[WPN].xmax);
                 int h = (int)getint(argv[6], 1, PageTable[WPN].ymax);
                 int x = (int)getint(argv[0], 0, PageTable[WPN].xmax - w);
@@ -3507,8 +3509,8 @@ TFLOAT* main_fill_polyY = NULL; // polygon vertex y-coords
                 ReadPage = WritePage = oldwrite;
             }
             else {
-                uint32_t n = (PageTable[WPN].xmax * PageTable[WPN].ymax * sizeof(uint32_t)) >> 2;
-                memcpy((void *)PageTable[BPN].address, (void*)PageTable[WPN].address, n);
+                size_t n = PageTable[WPN].xmax * PageTable[WPN].ymax * sizeof(uint32_t);
+                memcpy((void*)PageTable[WPN].address, (const void*)PageTable[BPN].address, n);
             }
 
             return;

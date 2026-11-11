@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations"><ProjectConfiguration Include="Release|Win32"><Configuration>Release</Configuration><Platform>Win32</Platform></ProjectConfiguration></ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{97A9A701-BEDD-4556-AB09-36D10AD6FE5D}</ProjectGuid><Keyword>Win32Proj</Keyword><WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup><LinkIncremental>false</LinkIncremental><OutDir>$(ProjectDir)build\</OutDir><IntDir>$(ProjectDir)build\obj\</IntDir></PropertyGroup>
+  <ItemDefinitionGroup><ClCompile><WarningLevel>Level4</WarningLevel><Optimization>MaxSpeed</Optimization><RuntimeLibrary>MultiThreaded</RuntimeLibrary><LanguageStandard>stdcpp17</LanguageStandard><DebugInformationFormat>None</DebugInformationFormat><PreprocessorDefinitions>_WIN32_WINNT=0x0601;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile><Link><SubSystem>Console</SubSystem><AdditionalDependencies>User32.lib;Gdi32.lib;Shell32.lib;Comdlg32.lib;%(AdditionalDependencies)</AdditionalDependencies><GenerateDebugInformation>false</GenerateDebugInformation></Link></ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="shell-tests.cpp" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

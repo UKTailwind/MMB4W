@@ -35,8 +35,32 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #include "audio.h"
 #include "Version.h"
 #include "error.h"
+#include "DesktopShell.h"
 
 #include <csetjmp>
+
+// Surface interpreter failures to local troubleshooting tools as well as the screen.
+static void LogInterpreterError(const char* message, const char* filename = "MMB4W-error.log") {
+    char path[MAX_PATH + 32] = {0};
+    DWORD length = GetModuleFileNameA(NULL, path, MAX_PATH);
+    if (!length || length >= MAX_PATH) return;
+    char* slash = strrchr(path, '\\');
+    if (!slash) return;
+    slash[1] = 0;
+    strcat_s(path, sizeof(path), filename);
+    FILE* fp = fopen(path, "ab");
+    if (!fp) return;
+    SYSTEMTIME time;
+    GetLocalTime(&time);
+    fprintf(fp, "[%04d-%02d-%02d %02d:%02d:%02d] %s\r\n",
+        time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute,
+        time.wSecond, message);
+    fclose(fp);
+}
+
+extern "C" void TraceRuntimeStartup(const char* message) {
+    if (getenv("MMB4W_TRACE_STARTUP")) LogInterpreterError(message, "MMB4W-startup.log");
+}
 
 int MMCharPos;
 volatile int second = 15;                                            // date/time counters
@@ -80,6 +104,15 @@ int OptionWidth;
 using clock_type = std::chrono::high_resolution_clock;
 using namespace std::literals; 
 extern "C" void CheckAbort(void) {
+    if (SystemMode == MODE_STOPTHREADS) ExitThread(0);
+    if (DesktopIsPaused() && SystemMode != MODE_QUIT) {
+        LARGE_INTEGER before, after;
+        QueryPerformanceCounter(&before);
+        while (DesktopIsPaused() && !DesktopQuitRequested() && SystemMode != MODE_QUIT && SystemMode != MODE_STOPTHREADS) Sleep(5);
+        QueryPerformanceCounter(&after);
+        fasttimerat0 += after.QuadPart - before.QuadPart;
+    }
+    if (SystemMode == MODE_STOPTHREADS) ExitThread(0);
     if (CurrentlyPlaying == P_WAV || CurrentlyPlaying == P_FLAC || CurrentlyPlaying == P_MP3 || CurrentlyPlaying == P_MOD)checkWAVinput();
     if (_excep_code) {
         SoftReset();
@@ -584,6 +617,7 @@ static void transform_star_command(char *input) {
 
 DWORD WINAPI Basic(LPVOID lpParameter)
 {
+    TraceRuntimeStartup(lpParameter ? (const char*)lpParameter : "BASIC: no command-line program");
     static int ErrorInPrompt;
     clearrepeat();
     LoadOptions();
@@ -642,12 +676,19 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     QueryPerformanceCounter((LARGE_INTEGER*) &startfasttime);
     QueryPerformanceCounter((LARGE_INTEGER*)&fasttimerat0);
 
-    while (mSecTimer < 1000) {}
-    while (!DisplayActive) {}
+    while (mSecTimer < 1000 || !DisplayActive) {
+        if (SystemMode == MODE_QUIT || SystemMode == MODE_STOPTHREADS || DesktopQuitRequested()) return 0;
+        Sleep(1);
+    }
     if (!(_excep_code == RESTART_NOAUTORUN || _excep_code == WATCHDOG_TIMEOUT || _excep_code == SCREWUP_TIMEOUT)) {
         if (Option.Autorun == 0) {
             if (!(_excep_code == RESET_COMMAND))MMPrintString((char *)MES_SIGNON);                           // print sign on message
         }
+    }
+    if (lpParameter == NULL && Option.Autorun == 0) {
+        MMPrintString((char*)"\r\nFile > Open program loads a BASIC program.\r\n");
+        MMPrintString((char*)"Ctrl+O opens a BASIC program. F10 opens input settings.\r\n");
+        MMPrintString((char*)"F1 help   F9 pause   F11 fullscreen   F12 screenshot\r\n\r\n");
     }
     if (_excep_code == WATCHDOG_TIMEOUT) {
         WatchdogSet = true;                                 // remember if it was a watchdog timeout
@@ -658,6 +699,7 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     }
     _excep_code = 0;
     SetCurrentDirectoryA(Option.defaultpath);
+    TraceRuntimeStartup(Option.defaultpath);
     WORD wVersionRequested;
     WSADATA wsaData;
     int err;
@@ -706,6 +748,7 @@ DWORD WINAPI Basic(LPVOID lpParameter)
         if (errpos) {
             CloseAllFiles();
             if (CurrentX != 0) MMPrintString((char*)"\r\n");                   // error message should be on a new line
+            LogInterpreterError(errstring);
             MMPrintString(errstring);
             memset(inpbuf, 0, STRINGSIZE);
         }
@@ -716,44 +759,37 @@ DWORD WINAPI Basic(LPVOID lpParameter)
     else {
         if (lpParameter != NULL) {
             char params[STRINGSIZE] = { 0 };
-            strcpy((char*)inpbuf, (char*)lpParameter);
-            char* q=strchr((char*)inpbuf, ',');
+            char filename[STRINGSIZE] = { 0 };
+            strcpy((char*)inpbuf, (const char*)lpParameter);
+            char* q = strchr((char*)inpbuf, ',');
             if (q != NULL) {
-                *q = 0;
-                q++;
+                *q++ = 0;
                 strcpy(params, q);
             }
             if (strchr((char*)inpbuf, '.') == NULL) strcat((char*)inpbuf, ".BAS");
-            if (existsfile((char *)inpbuf)) {
-                tknbuf[0] = GetCommandValue((unsigned char*)"RUN");
-                strcat((char*)tknbuf, "\"");
-                strcat((char*)tknbuf, (char*)inpbuf);
-                strcat((char*)tknbuf, "\"");
-                if (*params) {
-                    strcat((char*)tknbuf, ",");
-                    strcat((char*)tknbuf, params);
-                }
-                ExecuteProgram(tknbuf);                                     // execute the line straight away
-                memset(inpbuf, 0, STRINGSIZE);
-            }
-            else {
+            if (!existsfile((char*)inpbuf)) {
                 char path[STRINGSIZE] = { 0 }, name[STRINGSIZE] = { 0 };
-                tidyfilename((char *)inpbuf, path, name, 1);
+                tidyfilename((char*)inpbuf, path, name, 1);
                 strcpy((char*)inpbuf, path);
                 strcat((char*)inpbuf, name);
-                if (existsfile((char*)inpbuf)) {
-                    tknbuf[0] = GetCommandValue((unsigned char*)"RUN");
-                    strcat((char*)tknbuf, "\"");
-                    strcat((char*)tknbuf, (char*)inpbuf);
-                    strcat((char*)tknbuf, "\"");
-                    if (*params) {
-                        strcat((char*)tknbuf, ",");
-                        strcat((char*)tknbuf, params);
-                    }
-                    ExecuteProgram(tknbuf);                                     // execute the line straight away
-                    memset(inpbuf, 0, STRINGSIZE);
-                }
             }
+            TraceRuntimeStartup((const char*)inpbuf);
+            if (!existsfile((char*)inpbuf)) error((char*)"Cannot find startup program: $", inpbuf);
+            strcpy(filename, (char*)inpbuf);
+            if (strlen(filename) + strlen(params) + 9 >= STRINGSIZE) error((char*)"Startup command too long");
+            strcpy((char*)inpbuf, "RUN \"");
+            strcat((char*)inpbuf, filename);
+            strcat((char*)inpbuf, "\"");
+            if (*params) {
+                strcat((char*)inpbuf, ",");
+                strcat((char*)inpbuf, params);
+            }
+            memset(tknbuf, 0, STRINGSIZE);
+            tokenise(true);
+            TraceRuntimeStartup("BASIC: executing tokenised startup RUN");
+            ExecuteProgram(tknbuf);
+            TraceRuntimeStartup("BASIC: startup RUN returned");
+            memset(inpbuf, 0, STRINGSIZE);
         }
         if (*lastfileedited && Option.Autorun) {
             strcpy((char*)tknbuf, lastfileedited);
@@ -810,7 +846,8 @@ DWORD WINAPI mClock(LPVOID lpParameter)
 		std::this_thread::sleep_until(target_time);
 		target_time += 1ms;
         if(++CursorTimer > CURSOR_OFF + CURSOR_ON) CursorTimer = 0;		// used to control cursor blink rate
-        mSecTimer++; 
+        mSecTimer++;
+        if (DesktopIsPaused()) continue;
         AHRSTimer++;
         MouseTimer++;
         MouseProcTimer++;

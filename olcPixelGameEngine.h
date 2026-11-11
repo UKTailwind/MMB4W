@@ -524,6 +524,8 @@ int main()
 	#endif
 
 	#include <windows.h>
+	#include "DesktopShell.h"
+	#include "DesktopInput.h"
 	#undef _WINSOCKAPI_
 #endif
 
@@ -3688,10 +3690,11 @@ namespace olc
 		int32_t wh = vScreenSize.y * vPixelSize.y;
 		float wasp = (float)ww / (float)wh;
 
-		if (bPixelCohesion)
+		const int integerScale = (std::min)(vWindowSize.x / vScreenSize.x, vWindowSize.y / vScreenSize.y);
+		if (bPixelCohesion && integerScale >= 1)
 		{
-			vScreenPixelSize = (vWindowSize / vScreenSize);
-			vViewSize = (vWindowSize / vScreenSize) * vScreenSize;
+			vScreenPixelSize = {integerScale, integerScale};
+			vViewSize = vScreenSize * integerScale;
 		}
 		else
 		{
@@ -3710,7 +3713,7 @@ namespace olc
 
 	void PixelGameEngine::olc_UpdateWindowSize(int32_t x, int32_t y)
 	{
-		vWindowSize = { x, y };
+		vWindowSize = { (std::max)(1, x), (std::max)(1, y) };
 		olc_UpdateViewport();
 	}
 
@@ -3943,7 +3946,7 @@ namespace olc
 		{
 			nLastFPS = nFrameCount;
 			fFrameTimer -= 1.0f;
-			std::string sTitle = "OneLoneCoder.com - Pixel Game Engine - " + sAppName + " - FPS: " + std::to_string(nFrameCount);
+			std::string sTitle = sAppName + " - FPS: " + std::to_string(nFrameCount);
 			platform->SetWindowTitle(sTitle);
 			nFrameCount = 0;
 		}
@@ -5428,7 +5431,7 @@ namespace olc
 
 			// Define window furniture
 			DWORD dwExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-			DWORD dwStyle = WS_CAPTION | WS_SYSMENU | WS_VISIBLE;
+			DWORD dwStyle = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
 
 			olc::vi2d vTopLeft = vWindowPos;
 
@@ -5455,6 +5458,7 @@ namespace olc
 				vTopLeft.x, vTopLeft.y, width, height, NULL, NULL, GetModuleHandle(nullptr), this);
 
 			DragAcceptFiles(olc_hWnd, true);
+			DesktopAttachWindow(olc_hWnd);
 
 			// Create Keyboard Mapping
 			mapKeys[0x00] = Key::NONE;
@@ -5528,6 +5532,31 @@ namespace olc
 		// Windows Event Handler - this is statically connected to the windows event system
 		static LRESULT CALLBACK olc_WindowEvent(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		{
+			LRESULT desktopResult = 0;
+			if (DesktopHandleMessage(hWnd, uMsg, wParam, lParam, desktopResult)) return desktopResult;
+			if (uMsg == WM_APP + 413) {
+				const bool fullscreen = lParam != 0;
+				MONITORINFO monitor = { sizeof(monitor) };
+				GetMonitorInfoW(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &monitor);
+				const DWORD style = fullscreen ? WS_POPUP | WS_VISIBLE : WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+				SetWindowLongPtrW(hWnd, GWL_STYLE, style);
+				RECT bounds = monitor.rcMonitor;
+				if (!fullscreen) {
+					RECT frame = {0, 0, 0, 0};
+					AdjustWindowRectEx(&frame, style, GetMenu(hWnd) != nullptr, GetWindowLongW(hWnd, GWL_EXSTYLE));
+					const int extraWidth = frame.right - frame.left, extraHeight = frame.bottom - frame.top;
+					const RECT work = monitor.rcWork;
+					const int width = (std::min)(ptrPGE->ScreenWidth() * (int)wParam, (int)(work.right - work.left) - extraWidth);
+					const int height = (std::min)(ptrPGE->ScreenHeight() * (int)wParam, (int)(work.bottom - work.top) - extraHeight);
+					bounds.left = work.left + ((work.right - work.left) - width - extraWidth) / 2;
+					bounds.top = work.top + ((work.bottom - work.top) - height - extraHeight) / 2;
+					bounds.right = bounds.left + width + extraWidth;
+					bounds.bottom = bounds.top + height + extraHeight;
+				}
+				ShowWindow(hWnd, SW_RESTORE);
+				SetWindowPos(hWnd, nullptr, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top, SWP_NOZORDER | SWP_FRAMECHANGED);
+				return 0;
+			}
 			switch (uMsg)
 			{
 			case WM_MOUSEMOVE:
@@ -5542,17 +5571,22 @@ namespace olc
 			case WM_MOUSEWHEEL:	ptrPGE->olc_UpdateMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam));           return 0;
 			case WM_MOUSELEAVE: ptrPGE->olc_UpdateMouseFocus(false);                                    return 0;
 			case WM_SETFOCUS:	ptrPGE->olc_UpdateKeyFocus(true);                                       return 0;
-			case WM_KILLFOCUS:	ptrPGE->olc_UpdateKeyFocus(false);                                      return 0;
-			case WM_KEYDOWN:	ptrPGE->olc_UpdateKeyState(mapKeys[wParam], true);                      return 0;
-			case WM_KEYUP:		ptrPGE->olc_UpdateKeyState(mapKeys[wParam], false);                     return 0;
-			case WM_SYSKEYDOWN: ptrPGE->olc_UpdateKeyState(mapKeys[wParam], true);						return 0;
-			case WM_SYSKEYUP:	ptrPGE->olc_UpdateKeyState(mapKeys[wParam], false);						return 0;
-			case WM_LBUTTONDOWN:ptrPGE->olc_UpdateMouseState(0, true);                                  return 0;
-			case WM_LBUTTONUP:	ptrPGE->olc_UpdateMouseState(0, false);                                 return 0;
-			case WM_RBUTTONDOWN:ptrPGE->olc_UpdateMouseState(1, true);                                  return 0;
-			case WM_RBUTTONUP:	ptrPGE->olc_UpdateMouseState(1, false);                                 return 0;
-			case WM_MBUTTONDOWN:ptrPGE->olc_UpdateMouseState(2, true);                                  return 0;
-			case WM_MBUTTONUP:	ptrPGE->olc_UpdateMouseState(2, false);                                 return 0;
+			case WM_KILLFOCUS:
+                ptrPGE->olc_UpdateKeyFocus(false);
+                for (int key = 0; key < 256; ++key) ptrPGE->olc_UpdateKeyState(key, false);
+                for (int button = 0; button < 3; ++button) ptrPGE->olc_UpdateMouseState(button, false);
+                DesktopInputClearHeld();
+                return 0;
+			case WM_KEYDOWN:	DesktopInputKeyboardEvent((int)mapKeys[wParam], true); ptrPGE->olc_UpdateKeyState(mapKeys[wParam], true);                      return 0;
+			case WM_KEYUP:		DesktopInputKeyboardEvent((int)mapKeys[wParam], false); ptrPGE->olc_UpdateKeyState(mapKeys[wParam], false);                     return 0;
+			case WM_SYSKEYDOWN: DesktopInputKeyboardEvent((int)mapKeys[wParam], true); ptrPGE->olc_UpdateKeyState(mapKeys[wParam], true);						return 0;
+			case WM_SYSKEYUP:	DesktopInputKeyboardEvent((int)mapKeys[wParam], false); ptrPGE->olc_UpdateKeyState(mapKeys[wParam], false);						return 0;
+			case WM_LBUTTONDOWN:DesktopInputMouseEvent(0, true); ptrPGE->olc_UpdateMouseState(0, true);                                  return 0;
+			case WM_LBUTTONUP:	DesktopInputMouseEvent(0, false); ptrPGE->olc_UpdateMouseState(0, false);                                 return 0;
+			case WM_RBUTTONDOWN:DesktopInputMouseEvent(1, true); ptrPGE->olc_UpdateMouseState(1, true);                                  return 0;
+			case WM_RBUTTONUP:	DesktopInputMouseEvent(1, false); ptrPGE->olc_UpdateMouseState(1, false);                                 return 0;
+			case WM_MBUTTONDOWN:DesktopInputMouseEvent(2, true); ptrPGE->olc_UpdateMouseState(2, true);                                  return 0;
+			case WM_MBUTTONUP:	DesktopInputMouseEvent(2, false); ptrPGE->olc_UpdateMouseState(2, false);                                 return 0;
 			case WM_DROPFILES:
 			{
 				// This is all eww...
